@@ -432,8 +432,10 @@ class WFK:
         state : numpy ndarry
             The grid to be written to an XSF
         '''
+        # first run writes out real part of eigenfunction to xsf
         if component:
             xsf_file += '_real.xsf'
+        # second run writes out imaginary part
         else:
             xsf_file += '_imag.xsf'
         with open(xsf_file, 'w') as xsf:
@@ -476,6 +478,7 @@ class WFK:
                             print('\n', file=xsf, end='')
             print('END_DATAGRID_3D', file=xsf)
             print('END_BLOCK_DATAGRID3D', file=xsf)
+        # rerun method to write out imaginary part
         if component:
             xsf_file = xsf_file.split('_real')[0]
             self.WriteXSF(xsf_file, state, component=False)
