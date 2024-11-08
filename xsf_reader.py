@@ -11,16 +11,19 @@ atom_labels = {1:'H', 2:'He', 3:'Li', 4:'Be', 5:'B', 6:'C', 7:'N', 8:'O', 9:'F',
                92:'U'}
 
 class XSF():
-    def __init__(self, xsf_file):
+    def __init__(self, xsf_file:str)->None:
         self.xsf_file = xsf_file
         with open(xsf_file, 'r') as xsf:
             self.xsf_lines = xsf.readlines()
         self.lattice = np.zeros((3,3))
         for i, line in enumerate(self.xsf_lines):
+            # get lattice vectors from XSF file
             if line.strip() == 'PRIMVEC':
                 self.lattice[0,:] = [float(val) for val in self.xsf_lines[i+1].strip().split(' ')]
                 self.lattice[1,:] = [float(val) for val in self.xsf_lines[i+2].strip().split(' ')]
                 self.lattice[2,:] = [float(val) for val in self.xsf_lines[i+3].strip().split(' ')]
+            # get number of atoms and atomic symbols
+            # get atomic coordinates from XSF file
             if line.strip() == 'PRIMCOORD':
                 self.natoms = int(self.xsf_lines[i+1].strip().split(' ')[0])
                 self.coords = np.zeros((self.natoms, 3))
@@ -32,42 +35,58 @@ class XSF():
                     self.elements.append(element)
                     del coord[0]
                     self.coords[atom,:] = coord
+            # once density block is reached, get ngfft spacing and end init
             if line.strip() == 'DATAGRID_3D_DENSITY':
                 ngfft_spacing = self.xsf_lines[i+1].strip().split(' ')
                 ngfft_spacing = [int(val) for val in ngfft_spacing]
                 self.ngfftx = ngfft_spacing[0]
                 self.ngffty = ngfft_spacing[1]
                 self.ngfftz = ngfft_spacing[2]
-                break
+                return None
     #-----------------------------------------------------------------------------------------------------------------#
     # method removing XSF formatting from density grid
     def _RemoveXSF(self, grid:np.ndarray)->np.ndarray:
+        # to_be_del will be used to remove all extra data points added for XSF formatting
         to_be_del = np.ones((self.ngfftz, self.ngfftx, self.ngffty), dtype=bool)
         for z in range(self.ngfftz):
             for x in range(self.ngfftx):
                 for y in range(self.ngffty):
+                    # any time you reach the last density point it is a repeat of the first point
+                    # remove the end points along each axis
                     if y == self.ngffty - 1 or x == self.ngfftx - 1 or z == self.ngfftz - 1:
                         to_be_del[z,x,y] = False
         grid = grid[to_be_del]
         return grid.reshape((self.ngfftz-1,self.ngfftx-1,self.ngffty-1))
     #-----------------------------------------------------------------------------------------------------------------#
     # method reading in BandU eigenfunction from XSF
-    def _ReadDensity(self)->np.ndarray:
+    def ReadDensity(self, undo_xsf:bool=True)->np.ndarray:
+        '''
+        Method for reading in density grid from XSF file. Returns grid as N dimensional numpy array.
+
+        Parameters
+        ----------
+        undo_xsf : bool
+            If True (which is the default), then the XSF formatting is undone by removing end points.
+        '''
         for i, line in enumerate(self.xsf_lines):
+            # get density block, this assumes density is the end most data grid in the XSF
             if line.strip() == 'DATAGRID_3D_DENSITY':
+                # density starts 6 lines down from DATAGRID_3D_DENSITY header
                 density_lines = self.xsf_lines[i+6:]
+                # last line indicates end of data block, remove it
                 del density_lines[-1]
+                # last entry in density is a string indicating end of density, remove it
                 last_line = density_lines[-1].strip().split(' ')
                 last_line = [val for val in last_line if val != 'END_DATAGRID_3D']
+                # cast line back to a single string
                 last_line = ' '.join(last_line)
                 density_lines[-1] = last_line
+        # convert density to 3D array of floats
         density_lines = [line.strip().split(' ') for line in density_lines]
         density_lines = [val for line in density_lines for val in line]
         density_lines = np.array(density_lines, dtype=float)
         density_lines = density_lines.reshape((self.ngfftz, self.ngfftx, self.ngffty))
+        # undo XSF formatting if desired
+        if undo_xsf:
+            density_lines = self._RemoveXSF(density_lines)
         return density_lines
-    
-if __name__ == '__main__':
-    xsf = XSF('RbV3Sb5_eig_1_real.xsf')
-    grid = xsf._ReadDensity()
-    grid = xsf._RemoveXSF(grid)
