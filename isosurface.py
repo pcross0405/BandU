@@ -1,9 +1,9 @@
 from wfk_class import WFK, bytes2float, bytes2int
+from xsf_reader import XSF
 import numpy as np
 from scipy.fft import fftn
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter
-from typing import Generator
 
 class Isosurface(WFK):
     def __init__(self, filename):
@@ -233,7 +233,11 @@ class Isosurface(WFK):
         trans_color_pts, trans_overlap = self._TranslatePoints(points, overlap, self.rec_lattice)
         trans_color_pts = pv.PolyData(trans_color_pts)
         trans_color_pts['values'] = trans_overlap
-        color_grid = color_grid.interpolate(trans_color_pts, sharpness=sharpness, radius=radius, strategy=strategy)
+        color_grid = color_grid.interpolate(trans_color_pts, 
+                                            sharpness=sharpness, 
+                                            radius=radius, 
+                                            strategy=strategy,
+        )
         color_inds = []
         for iso_point in iso_surf_pts:
             ind = color_grid.find_closest_point(iso_point)
@@ -274,7 +278,7 @@ class Isosurface(WFK):
                                     radius=radius, 
                                     sharpness=sharpness, 
                                     strategy=strategy, 
-                                    null_value=null_value
+                                    null_value=null_value,
             )
         # create isosurface
         if rng == None:
@@ -292,8 +296,7 @@ class Isosurface(WFK):
                                           radius,
                                           sharpness,
                                           strategy
-                    )
-            print(color)
+            )
         # open plotter and add meshes
         if show_outline:
             self.p.add_mesh(grid.outline())
@@ -315,19 +318,41 @@ class Isosurface(WFK):
                             metallic=0.7,
                             roughness=0.5,
                             scalars=color
-                            )
+            )
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting isosurface color from BandU overlap with isosurface states
-    def _BandUColor(self, energy_level:float, width:float, states:int
+    def _BandUColor(self, energy_level:float, width:float, states:int, read_xsf:bool=True, xsf_root:str=None, 
+                    xsf_nums:list=[1]
         )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
-        eigfuncs = []
-        for eigfunc in self.BandU(energy_level=energy_level, width=width, states=states, XSFFormat=False):
-            eigfuncs.append(eigfunc)
-        if states > len(eigfuncs):
-            states = len(eigfuncs)
-            print(f'There are only {states} BandU functions, setting BandU parameter to {states}')
-        states -= 1
-        BandU_func = eigfuncs[states]
+        # function only used by _BandUColor for reading in all BandU XSF files necessary
+        def _ReadXSFs()->np.ndarray:
+            real_func = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
+            imag_func = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
+            for num in xsf_nums:
+                real_path = xsf_root + f'_{num}_real.xsf'
+                real_xsf = XSF(real_path)
+                real_func += real_xsf.ReadDensity()
+                imag_path = xsf_root + f'_{num}_imag.xsf'
+                imag_xsf = XSF(imag_path)
+                imag_func += 1j*imag_xsf.ReadDensity()
+            eigfunc = real_func + imag_func
+            return eigfunc
+        # read in BandU eigenfunction from XSF file
+        if read_xsf:
+            BandU_func = _ReadXSFs()
+        # or calculate eigenfunction from WFK
+        else:
+            raise NotImplementedError('''Currently this program only supports reading in density from an XSF file
+                                      Action: Set 'read_xsf' to True and provide 'xsf_path' with path to XSF file
+            ''')
+            eigfuncs = []
+            for eigfunc in self.BandU(energy_level=energy_level, width=width, states=states, XSFFormat=False):
+                eigfuncs.append(eigfunc)
+            if states > len(eigfuncs):
+                states = len(eigfuncs)
+                print(f'There are only {states} BandU functions, setting BandU parameter to {states}')
+            states -= 1
+            BandU_func = eigfuncs[states]
         kpts, eigvals, bands, overlaps = self._GetOverlapValandKpt(energy_level=energy_level, 
                                                                     width=width, 
                                                                     BandU=BandU_func
@@ -345,13 +370,22 @@ class Isosurface(WFK):
                        steps:tuple=None, radius:float=0.25, sharpness:float=2.0, strategy:str='null_value', 
                        null_value:float=None, isosurfaces:int=2, rng:list=None, smooth:bool=True, 
                        show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, show_vol:bool=False,
-                       scipy_interpolation:bool=False, width:float=0.0002, color:np.ndarray=None, BandU:int=0,
-                       energy_level:float=None
+                       scipy_interpolation:bool=False, width:float=0.0002, color:np.ndarray=None, BandU:int=1,
+                       energy_level:float=None, read_xsf:bool=True, xsf_root:str=None, xsf_nums:list=[1],
+                       bandu_width:float=None
         )->None:
         # find BandU eigen fxns and compute overlaps of eigen fxns with reciprocal space states
         # these overlap values will be used to color isosurface
-        if BandU > 0:
-            kpts, eigvals, bands, overlaps = self._BandUColor(energy_level, width, BandU)
+        if read_xsf:
+            if bandu_width == None:
+                bandu_width = width
+            kpts, eigvals, bands, overlaps = self._BandUColor(energy_level, 
+                                                              bandu_width, 
+                                                              BandU, 
+                                                              read_xsf=read_xsf, 
+                                                              xsf_root=xsf_root,
+                                                              xsf_nums=xsf_nums
+            )
             _, overlaps = self._SymPtsAndVals(kpts, overlaps)
         # if BandU is not specified, just recover kpts, eigenvals, and bands
         # this will construct the isosurface with monochromatic coloration
