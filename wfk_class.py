@@ -466,8 +466,8 @@ class WFK:
             print(f'{self.real_lattice[2,0]} {self.real_lattice[2,1]} {self.real_lattice[2,2]}', file=xsf)
             count = 0
             for z in range(self.ngfftz+1):
-                for y in range(self.ngffty+1):
-                    for x in range(self.ngfftx+1):
+                for x in range(self.ngfftx+1):
+                    for y in range(self.ngffty+1):
                         count += 1
                         if component:
                             print(state[z][x][y].real, file=xsf, end=' ')
