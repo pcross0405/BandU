@@ -317,12 +317,6 @@ class Isosurface(WFK):
                             scalars=color
                             )
     #-----------------------------------------------------------------------------------------------------------------#
-    # Render isosurfaces
-    def _Render(self)->None:
-        self.p.add_text(f'Fermi Energy:{self.fermi} H', font_size=12)
-        self.p.show()
-        self.p.app.exec_()
-    #-----------------------------------------------------------------------------------------------------------------#
     # method for getting isosurface color from BandU overlap with isosurface states
     def _BandUColor(self, energy_level:float, width:float, states:int
         )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
@@ -339,6 +333,12 @@ class Isosurface(WFK):
                                                                     BandU=BandU_func
         )
         return kpts, eigvals, bands, overlaps
+    #-----------------------------------------------------------------------------------------------------------------#
+    # Render isosurfaces
+    def _Render(self)->None:
+        self.p.add_text(f'Fermi Energy:{self.fermi} H', font_size=12)
+        self.p.show()
+        self.p.app.exec_()
     #-----------------------------------------------------------------------------------------------------------------#
     # wrapper around class methods to plot isosurface with one function call
     def PlotIsosurface(self, translation:np.ndarray=None, grid:pv.ImageData=None,
