@@ -49,7 +49,7 @@ class XSF():
                     if y == self.ngffty - 1 or x == self.ngfftx - 1 or z == self.ngfftz - 1:
                         to_be_del[z,x,y] = False
         grid = grid[to_be_del]
-        return grid
+        return grid.reshape((self.ngfftz-1,self.ngfftx-1,self.ngffty-1))
     #-----------------------------------------------------------------------------------------------------------------#
     # method reading in BandU eigenfunction from XSF
     def _ReadDensity(self)->np.ndarray:
