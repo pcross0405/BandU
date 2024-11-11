@@ -2,6 +2,7 @@ from wfk_class import WFK, bytes2float, bytes2int
 from xsf_reader import XSF
 import numpy as np
 from scipy.fft import fftn
+from scipy.spatial import Voronoi
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter
 
@@ -9,39 +10,6 @@ class Isosurface(WFK):
     def __init__(self, filename):
         super().__init__(filename)
         self.p = BackgroundPlotter(window_size=(600,400))
-    def _ReadEigenvalues(self):
-        wfk = open(self.filename, 'rb')
-        #-----------#
-        # skip header
-        wfk.read(298)
-        wfk.read(4*(2*self.nkpt + self.nkpt*self.nsppol + self.npsp + 10*self.nsym + self.natom))
-        wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + self.ntypat + 3*self.natom))
-        wfk.read(self.npsp*(176))
-        #-------------------------------#
-        # begin reading wavefunction body
-        for i in range(self.nsppol):
-            for j in range(self.nkpt):
-                print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
-                if j+1 == self.nkpt:
-                    print('\n', end='')
-                eigenvalues = []
-                wfk.read(4)
-                npw = bytes2int(wfk.read(4))
-                self.nspinor = bytes2int(wfk.read(4))
-                nband_temp = bytes2int(wfk.read(4))
-                wfk.read(8)
-                wfk.read(12*npw)
-                wfk.read(8)
-                #------------------------------------------------------------------#
-                # only need eigenvalues for Fermi surface, skip over everything else
-                for nband in range(nband_temp):
-                    eigenval = bytes2float(wfk.read(8))
-                    eigenvalues.append(eigenval)
-                
-                wfk.read(nband_temp*8)
-                wfk.read(4)
-                wfk.read(nband_temp*(8 + npw*16))
-                yield eigenvalues
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting eigenvalues and kpoints within specified energy range
     def _GetValAndKpt(self, energy_level:float=None, width:float=0.0005)->tuple[np.ndarray, np.ndarray, list]:
@@ -321,7 +289,7 @@ class Isosurface(WFK):
             )
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting isosurface color from BandU overlap with isosurface states
-    def _BandUColor(self, energy_level:float, width:float, states:int, read_xsf:bool=True, xsf_root:str=None, 
+    def _BandUColor(self, energy_level:float, width:float, states:int, xsf_root:str=None, 
                     xsf_nums:list=[1]
         )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
         # function only used by _BandUColor for reading in all BandU XSF files necessary
@@ -338,7 +306,7 @@ class Isosurface(WFK):
             eigfunc = real_func + imag_func
             return eigfunc
         # read in BandU eigenfunction from XSF file
-        if read_xsf:
+        if xsf_root != None:
             BandU_func = _ReadXSFs()
         # or calculate eigenfunction from WFK
         else:
@@ -358,6 +326,12 @@ class Isosurface(WFK):
                                                                     BandU=BandU_func
         )
         return kpts, eigvals, bands, overlaps
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for finding Brillouin zone
+    def _GetBZ(self, lat_points:np.ndarray)->np.ndarray:
+        vor_points, _ = self._TranslatePoints(lat_points, np.zeros(1), self.rec_lattice)
+        vor_tessellation = Voronoi(vor_points)
+        return vor_tessellation.vertices
     #-----------------------------------------------------------------------------------------------------------------#
     # Render isosurfaces
     def _Render(self)->None:
@@ -391,18 +365,29 @@ class Isosurface(WFK):
         # this will construct the isosurface with monochromatic coloration
         else:
             kpts, eigvals, bands = self._GetValAndKpt(energy_level=energy_level, width=width)
+        # apply symmetry operations to kpoints
         kpts, eigvals = self._SymPtsAndVals(kpts, eigvals)
+        # convert reduce coordinates to Cartesian coordinates
         kpts = np.matmul(kpts, self.rec_lattice)
+        # plot isosurface by band
         for band in bands:
+            # get all eigenvalues for current iterated band
             energies = eigvals[:,band].reshape((len(eigvals[:,band]),1))
-            if BandU > 0:
+            # get all overlap values if desired
+            if read_xsf:
                 overlap = overlaps[:,band].reshape((len(overlaps[:,band]),1))
             else:
                 overlap = None
+            # make PyVista surface objext
             self._MakeIsosurface(kpts, energies, width=width, translation=translation, grid=grid, steps=steps, 
                                  radius=radius, sharpness=sharpness, strategy=strategy, null_value=null_value, 
                                  isosurfaces=isosurfaces, rng=rng, smooth=smooth, show_outline=show_outline, 
                                  show_points=show_points, show_isosurf=show_isosurf, show_vol=show_vol, 
                                  scipy_interpolation=scipy_interpolation, color=color, overlap=overlap
             )
+        # get Brillouin zone and add it to plotter
+        vor_vertices = self._GetBZ(np.zeros(3))
+        vor_vertices = pv.PolyData(vor_vertices)
+        self.p.add_mesh(vor_vertices.points, color='black')
+        # render plot
         self._Render()
