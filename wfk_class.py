@@ -263,7 +263,7 @@ class WFK:
         print('WFK header read')
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
-    # method to read body of wavefunction file
+    # method to read entire body of wavefunction file
     def _ReadWFK(self)->Generator[list, list, list]:
         wfk = open(self.filename, 'rb')
         #-----------#
@@ -311,6 +311,43 @@ class WFK:
                     coeffs.append(cg)
                     wfk.read(4)            
                 yield eigenvalues, coeffs, kpoints
+        print('WFK body read')
+        wfk.close()
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method to read only eigenvalues from body of wavefunction file
+    def _ReadEigenvalues(self):
+        wfk = open(self.filename, 'rb')
+        #-----------#
+        # skip header
+        wfk.read(298)
+        wfk.read(4*(2*self.nkpt + self.nkpt*self.nsppol + self.npsp + 10*self.nsym + self.natom))
+        wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + self.ntypat + 3*self.natom))
+        wfk.read(self.npsp*(176))
+        #-------------------------------#
+        # begin reading wavefunction body
+        for i in range(self.nsppol):
+            for j in range(self.nkpt):
+                print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
+                if j+1 == self.nkpt:
+                    print('\n', end='')
+                eigenvalues = []
+                wfk.read(4)
+                npw = bytes2int(wfk.read(4))
+                self.nspinor = bytes2int(wfk.read(4))
+                nband_temp = bytes2int(wfk.read(4))
+                wfk.read(8)
+                wfk.read(12*npw)
+                wfk.read(8)
+                #------------------------------------------------------------------#
+                # only need eigenvalues for Fermi surface, skip over everything else
+                for nband in range(nband_temp):
+                    eigenval = bytes2float(wfk.read(8))
+                    eigenvalues.append(eigenval)
+                
+                wfk.read(nband_temp*8)
+                wfk.read(4)
+                wfk.read(nband_temp*(8 + npw*16))
+                yield eigenvalues
         print('WFK body read')
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
