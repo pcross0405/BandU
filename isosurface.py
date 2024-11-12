@@ -1,4 +1,4 @@
-from wfk_class import WFK, bytes2float, bytes2int
+from wfk_class import WFK, Real2Reciprocal
 from xsf_reader import XSF
 import numpy as np
 from scipy.fft import fftn
@@ -285,7 +285,8 @@ class Isosurface(WFK):
                             pbr=True,
                             metallic=0.7,
                             roughness=0.5,
-                            scalars=color
+                            scalars=color,
+                            cmap='bwr'
             )
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting isosurface color from BandU overlap with isosurface states
@@ -328,10 +329,34 @@ class Isosurface(WFK):
         return kpts, eigvals, bands, overlaps
     #-----------------------------------------------------------------------------------------------------------------#
     # method for finding Brillouin zone
-    def _GetBZ(self, lat_points:np.ndarray)->np.ndarray:
-        vor_points, _ = self._TranslatePoints(lat_points, np.zeros(1), self.rec_lattice)
+    def _GetBZ(self, BZ_width:float)->None:
+        # get reciprocal space lattice points
+        vor_points, _ = self._TranslatePoints(np.zeros(3), np.zeros(1), self.rec_lattice)
+        vor_points = np.unique(vor_points, axis=0)
+        # Voronoi tessallate the lattice points
         vor_tessellation = Voronoi(vor_points)
-        return vor_tessellation.vertices
+        # find Voronoi region that encapsulates Brillouin zone
+        for i, region in enumerate(vor_tessellation.regions):
+            if -1 not in region and region != []:
+                vor_cell = i
+                break
+        # get vertices of BZ Voronoi region
+        vor_cell_verts = vor_tessellation.regions[vor_cell]
+        vor_verts = np.take(vor_tessellation.vertices, vor_cell_verts, axis=0)
+        # find which vertices are closest to each other
+        point_cloud = pv.PolyData(vor_verts)
+        vert_inds = []
+        for i, vert in enumerate(vor_verts):
+            nearest_pts = point_cloud.find_closest_point(vert, n=4)
+            # current index is a repeated entry every other point since this is how PyVista interprets lines
+            nearest_pts = np.insert(nearest_pts, [2,4], [i,i])
+            vert_inds.append(nearest_pts)
+        # convert nested list to flat list
+        vert_inds = [int(ind) for verts in vert_inds for ind in verts]
+        # get cartesian coordinates
+        vor_verts = np.take(vor_verts, vert_inds, axis=0)
+        # add BZ edges as lines to plotter
+        self.p.add_lines(vor_verts, color='black', width=BZ_width)
     #-----------------------------------------------------------------------------------------------------------------#
     # Render isosurfaces
     def _Render(self)->None:
@@ -346,7 +371,7 @@ class Isosurface(WFK):
                        show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, show_vol:bool=False,
                        scipy_interpolation:bool=False, width:float=0.0002, color:np.ndarray=None, BandU:int=1,
                        energy_level:float=None, read_xsf:bool=True, xsf_root:str=None, xsf_nums:list=[1],
-                       bandu_width:float=None
+                       bandu_width:float=None, BZ_width:float=2.5
         )->None:
         # find BandU eigen fxns and compute overlaps of eigen fxns with reciprocal space states
         # these overlap values will be used to color isosurface
@@ -356,7 +381,6 @@ class Isosurface(WFK):
             kpts, eigvals, bands, overlaps = self._BandUColor(energy_level, 
                                                               bandu_width, 
                                                               BandU, 
-                                                              read_xsf=read_xsf, 
                                                               xsf_root=xsf_root,
                                                               xsf_nums=xsf_nums
             )
@@ -386,8 +410,6 @@ class Isosurface(WFK):
                                  scipy_interpolation=scipy_interpolation, color=color, overlap=overlap
             )
         # get Brillouin zone and add it to plotter
-        vor_vertices = self._GetBZ(np.zeros(3))
-        vor_vertices = pv.PolyData(vor_vertices)
-        self.p.add_mesh(vor_vertices.points, color='black')
+        self._GetBZ(BZ_width)
         # render plot
         self._Render()
