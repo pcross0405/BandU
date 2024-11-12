@@ -7,9 +7,11 @@ import pyvista as pv
 from pyvistaqt import BackgroundPlotter
 
 class Isosurface(WFK):
-    def __init__(self, filename):
+    def __init__(self, filename:str, depth_peeling:bool=True):
         super().__init__(filename)
         self.p = BackgroundPlotter(window_size=(600,400))
+        if depth_peeling:
+            self.p.enable_depth_peeling(10)
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting eigenvalues and kpoints within specified energy range
     def _GetValAndKpt(self, energy_level:float=None, width:float=0.0005)->tuple[np.ndarray, np.ndarray, list]:
