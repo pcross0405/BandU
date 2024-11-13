@@ -37,7 +37,7 @@ class Isosurface(WFK):
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting real space wavefunctions
     def _FindOverlap(self, coeffs:np.ndarray, wfk_grid:np.ndarray, BandU:np.ndarray)->np.ndarray:
-        ngfft_grid = np.zeros((self.ngfftx, self.ngffty, self.ngfftz), dtype=complex)
+        ngfft_grid = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
         overlaps = []
         for wfk in coeffs:
             for i, points in enumerate(wfk_grid):
@@ -396,7 +396,7 @@ class Isosurface(WFK):
                        show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, show_vol:bool=False,
                        scipy_interpolation:bool=False, width:float=0.0002, color:str='green', BandU:int=1,
                        energy_level:float=None, read_xsf:bool=True, xsf_root:str=None, xsf_nums:list=[1],
-                       bandu_width:float=None, BZ_width:float=2.5, delaunay:bool=True
+                       bandu_width:float=None, BZ_width:float=2.5, delaunay:bool=True, colormap:str='seismic'
         )->None:
         # find BandU eigen fxns and compute overlaps of eigen fxns with reciprocal space states
         # these overlap values will be used to color isosurface
@@ -435,7 +435,7 @@ class Isosurface(WFK):
                                  isosurfaces=isosurfaces, rng=rng, smooth=smooth, show_outline=show_outline, 
                                  show_points=show_points, show_isosurf=show_isosurf, show_vol=show_vol, 
                                  scipy_interpolation=scipy_interpolation, color=color, overlap=overlap, hull=hull,
-                                 delaunay=delaunay
+                                 delaunay=delaunay, colormap=colormap
             )
         # render plot
         self._Render()
