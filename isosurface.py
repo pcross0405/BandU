@@ -49,8 +49,8 @@ class Isosurface(WFK):
                 z = points[2]
                 ngfft_grid[z][x][y] = wfk[i]
             ngfft_grid = fftn(ngfft_grid, norm='ortho')
-            overlap = np.sum(BandU*ngfft_grid)
-            overlaps.append(overlap*np.conj(overlap))
+            overlap = np.sum(np.conj(BandU)*ngfft_grid)
+            overlaps.append(np.abs(overlap))
         return np.array(overlaps).real
     #-----------------------------------------------------------------------------------------------------------------#
     # method getting eigenvalues and kpts within defined energy range, also get overlap of BandU eigfuncs w/ states
@@ -451,14 +451,17 @@ class Isosurface(WFK):
         self._Render()
     #-----------------------------------------------------------------------------------------------------------------#
     # method to load previously calculated surface
-    def LoadFermi(self, colormap:str='seismic', BZ_width:float=2.5, smooth:bool=True)->None:
+    def LoadFermi(self, colormap:str='seismic', BZ_width:float=2.5, smooth:bool=True, lighting:bool=True, 
+                  ambient:float=1.0, diffuse:float=1.0, specular:float=1.0, specular_power:float=64.0, pbr:bool=True,
+                  metallic:float=1.0, roughness:float=1.0, color:str='green', file_name:str='Fermi_surface.pkl'
+        )->None:
         _ = self._GetBZ(BZ_width)
-        with open('Fermi_surface.pkl', 'rb') as f:
+        with open(file_name, 'rb') as f:
             _ = pkl.load(f)
             _ = pkl.load(f)
             _ = pkl.load(f)
             bands = pkl.load(f)
-        with open('Fermi_surface.pkl', 'rb') as f:
+        with open(file_name, 'rb') as f:
             for _ in bands:
                 iso_surf = pkl.load(f)
                 opacities = pkl.load(f)
@@ -467,17 +470,17 @@ class Isosurface(WFK):
                 self.p.add_mesh(iso_surf, 
                                 style='surface',
                                 smooth_shading=smooth, 
-                                lighting=True,
-                                ambient=1.0,
-                                diffuse=1.0,
-                                specular=1.0,
-                                specular_power=64.0,
-                                pbr=True,
-                                metallic=0.0,
-                                roughness=0.45,
+                                lighting=lighting,
+                                ambient=ambient,
+                                diffuse=diffuse,
+                                specular=specular,
+                                specular_power=specular_power,
+                                pbr=pbr,
+                                metallic=metallic,
+                                roughness=roughness,
                                 scalars=scalars,
                                 cmap=colormap,
                                 opacity=opacities,
-                                color='green'
+                                color=color
                 )
         self._Render()
