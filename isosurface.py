@@ -5,11 +5,14 @@ from scipy.fft import fftn
 from scipy.spatial import Voronoi, ConvexHull, Delaunay
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter
+import pickle as pkl
 
 class Isosurface(WFK):
-    def __init__(self, filename:str, depth_peeling:bool=True):
+    def __init__(self, filename:str, depth_peeling:bool=True, save:bool=False):
         super().__init__(filename)
         self.p = BackgroundPlotter(window_size=(600,400))
+        self.save = save
+        self.band_count = None
         if depth_peeling:
             self.p.enable_depth_peeling(10)
     #-----------------------------------------------------------------------------------------------------------------#
@@ -287,6 +290,12 @@ class Isosurface(WFK):
                                             sharpness,
                                             strategy
             )
+        if self.save:
+            with open('Fermi_surface.pkl', 'ab') as f:
+                pkl.dump(iso_surf, f)
+                pkl.dump(opacities, f)
+                pkl.dump(scalars, f)
+                pkl.dump(self.band_count, f)
         # open plotter and add meshes
         if show_outline:
             self.p.add_mesh(grid.outline())
@@ -302,8 +311,9 @@ class Isosurface(WFK):
                             smooth_shading=smooth, 
                             lighting=True,
                             ambient=1.0,
-                            diffuse=1.0,
-                            specular=0.8,
+                            diffuse=0.5,
+                            specular=0.5,
+                            specular_power=64.0,
                             pbr=True,
                             metallic=0.7,
                             roughness=0.5,
@@ -314,8 +324,7 @@ class Isosurface(WFK):
             )
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting isosurface color from BandU overlap with isosurface states
-    def _BandUColor(self, energy_level:float, width:float, states:int, xsf_root:str=None, 
-                    xsf_nums:list=[1]
+    def _BandUColor(self, energy_level:float, width:float, states:int, xsf_root:str=None, xsf_nums:list=[1]
         )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
         # function only used by _BandUColor for reading in all BandU XSF files necessary
         def _ReadXSFs()->np.ndarray:
@@ -421,6 +430,7 @@ class Isosurface(WFK):
         # get Brillouin zone and add it to plotter
         hull = self._GetBZ(BZ_width)
         # plot isosurface by band
+        self.band_count = bands
         for band in bands:
             # get all eigenvalues for current iterated band
             energies = eigvals[:,band].reshape((len(eigvals[:,band]),1))
@@ -438,4 +448,36 @@ class Isosurface(WFK):
                                  delaunay=delaunay, colormap=colormap
             )
         # render plot
+        self._Render()
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method to load previously calculated surface
+    def LoadFermi(self, colormap:str='seismic', BZ_width:float=2.5, smooth:bool=True)->None:
+        _ = self._GetBZ(BZ_width)
+        with open('Fermi_surface.pkl', 'rb') as f:
+            _ = pkl.load(f)
+            _ = pkl.load(f)
+            _ = pkl.load(f)
+            bands = pkl.load(f)
+        with open('Fermi_surface.pkl', 'rb') as f:
+            for _ in bands:
+                iso_surf = pkl.load(f)
+                opacities = pkl.load(f)
+                scalars = pkl.load(f)
+                _ = pkl.load(f)
+                self.p.add_mesh(iso_surf, 
+                                style='surface',
+                                smooth_shading=smooth, 
+                                lighting=True,
+                                ambient=1.0,
+                                diffuse=1.0,
+                                specular=1.0,
+                                specular_power=64.0,
+                                pbr=True,
+                                metallic=0.0,
+                                roughness=0.45,
+                                scalars=scalars,
+                                cmap=colormap,
+                                opacity=opacities,
+                                color='green'
+                )
         self._Render()
