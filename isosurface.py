@@ -8,11 +8,12 @@ from pyvistaqt import BackgroundPlotter
 import pickle as pkl
 
 class Isosurface(WFK):
-    def __init__(self, filename:str, depth_peeling:bool=True, save:bool=False):
+    def __init__(self, filename:str, depth_peeling:bool=True, save:bool=False, empty_mesh:bool=False):
         super().__init__(filename)
         self.p = BackgroundPlotter(window_size=(600,400))
         self.save = save
         self.band_count = None
+        pv.global_theme.allow_empty_mesh = empty_mesh
         if depth_peeling:
             self.p.enable_depth_peeling(10)
     #-----------------------------------------------------------------------------------------------------------------#
