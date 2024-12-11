@@ -363,6 +363,25 @@ class Isosurface(WFK):
     #-----------------------------------------------------------------------------------------------------------------#
     # method for finding Brillouin zone
     def _GetBZ(self, BZ_width:float)->np.ndarray:
+        # function used only by _GetBZ
+        def CheckPts(pts:np.ndarray, verts:np.ndarray)->np.ndarray:
+            # get cartesian coordinates
+            verts = np.take(verts, pts, axis=0)
+            # last point is the furthest, check if it is in same plane as other points
+            pt = verts[-1,:]
+            check = False
+            # truncate floats to avoid floating point errors when checking for equivalence
+            pt = [np.sign(n)*float(str(np.abs(n))[:8]) for n in pt]
+            for i, vert in enumerate(verts):
+                verts[i,:] = [np.sign(n)*float(str(np.abs(n))[:8]) for n in vert]
+            # check if points are in same plane
+            if pt[0] == verts[0,:][0] and pt[0] == verts[1,:][0] and pt[0] == verts[2,:][0]:
+                check = True 
+            if pt[1] == verts[0,:][1] and pt[1] == verts[1,:][1] and pt[1] == verts[2,:][1]:
+                check = True
+            if pt[2] == verts[0,:][2] and pt[2] == verts[1,:][2] and pt[2] == verts[2,:][2]:
+                check = True
+            return check
         # get reciprocal space lattice points
         vor_points, _ = self._TranslatePoints(np.zeros(3), np.zeros(1), self.rec_lattice)
         vor_points = np.unique(vor_points, axis=0)
@@ -381,6 +400,14 @@ class Isosurface(WFK):
         vert_inds = []
         for i, vert in enumerate(vor_verts):
             nearest_pts = point_cloud.find_closest_point(vert, n=4)
+            c = 4
+            # iterate check until points are no longer in same plane
+            while CheckPts(nearest_pts, vor_verts):
+                c += 1
+                nearest_pts = point_cloud.find_closest_point(vert, n=c)
+                len_arr = c - 4
+                arr = -1*np.arange(len_arr) - 2
+                nearest_pts = np.delete(nearest_pts, arr, axis=0)
             # current index is a repeated entry every other point since this is how PyVista interprets lines
             nearest_pts = np.insert(nearest_pts, [2,4], [i,i])
             vert_inds.append(nearest_pts)
