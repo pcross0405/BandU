@@ -1,5 +1,6 @@
 from wfk_class import WFK
 from xsf_reader import XSF
+from colors import Colors
 import numpy as np
 from scipy.fft import fftn
 from scipy.spatial import Voronoi, ConvexHull, Delaunay
@@ -115,8 +116,8 @@ class Isosurface(WFK):
         dimy = steps[1]
         dimz = steps[2]
         grid = pv.ImageData()
-        grid.origin = (xmin, ymin, zmin)
-        grid.spacing = (2*xmax/(dimx-1), 2*ymax/(dimy-1), 2*zmax/(dimz-1))
+        grid.origin = (xmin-0.035, ymin-0.035, zmin-0.035)
+        grid.spacing = (2*(xmax+0.05)/dimx, 2*(ymax+0.05)/dimy, 2*(zmax+0.05)/dimz)
         grid.dimensions = (dimx, dimy, dimz)
         return grid
     #-----------------------------------------------------------------------------------------------------------------#
@@ -243,8 +244,10 @@ class Isosurface(WFK):
                         strategy:str='null_value', null_value:float=None, isosurfaces:int=10, rng:list=None, 
                         smooth:bool=True, show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, 
                         show_vol:bool=False, scipy_interpolation:bool=False, width:float=0.0002, color:str='green',
-                        scalars:np.ndarray=None, overlap:np.ndarray=None, colormap:str='seismic', 
-                        hull:np.ndarray=None, delaunay:bool=True
+                        scalars:np.ndarray=None, overlap:np.ndarray=None, colormap:str=Colors().GrOrRd, 
+                        hull:np.ndarray=None, delaunay:bool=True, lighting:bool=True, ambient:float=0.5, 
+                        diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
+                        metallic:float=0.5, roughness:float=0.5
         )->None:
         # translate points to fill grid space
         if translation == None:
@@ -310,14 +313,14 @@ class Isosurface(WFK):
             self.p.add_mesh(iso_surf, 
                             style='surface',
                             smooth_shading=smooth, 
-                            lighting=True,
-                            ambient=1.0,
-                            diffuse=0.5,
-                            specular=0.5,
-                            specular_power=64.0,
-                            pbr=True,
-                            metallic=0.7,
-                            roughness=0.5,
+                            lighting=lighting,
+                            ambient=ambient,
+                            diffuse=diffuse,
+                            specular=specular,
+                            specular_power=specular_power,
+                            pbr=pbr,
+                            metallic=metallic,
+                            roughness=roughness,
                             scalars=scalars,
                             cmap=colormap,
                             opacity=opacities,
@@ -433,7 +436,9 @@ class Isosurface(WFK):
                        show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, show_vol:bool=False,
                        scipy_interpolation:bool=False, width:float=0.0002, color:str='green', BandU:int=1,
                        energy_level:float=None, read_xsf:bool=True, xsf_root:str=None, xsf_nums:list=[1],
-                       bandu_width:float=None, BZ_width:float=2.5, delaunay:bool=True, colormap:str='seismic'
+                       bandu_width:float=None, BZ_width:float=2.5, delaunay:bool=True, colormap:str=Colors().GrOrRd, 
+                       lighting:bool=True, ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, 
+                       specular_power:float=128.0, pbr:bool=False, metallic:float=0.5, roughness:float=0.5
         )->None:
         # find BandU eigen fxns and compute overlaps of eigen fxns with reciprocal space states
         # these overlap values will be used to color isosurface
@@ -473,15 +478,18 @@ class Isosurface(WFK):
                                  isosurfaces=isosurfaces, rng=rng, smooth=smooth, show_outline=show_outline, 
                                  show_points=show_points, show_isosurf=show_isosurf, show_vol=show_vol, 
                                  scipy_interpolation=scipy_interpolation, color=color, overlap=overlap, hull=hull,
-                                 delaunay=delaunay, colormap=colormap
+                                 delaunay=delaunay, colormap=colormap, lighting=lighting, ambient=ambient, 
+                                 diffuse=diffuse, specular=specular, specular_power=specular_power, pbr=pbr, 
+                                 metallic=metallic, roughness=roughness
             )
         # render plot
         self._Render()
     #-----------------------------------------------------------------------------------------------------------------#
     # method to load previously calculated surface
-    def LoadFermi(self, colormap:str='seismic', BZ_width:float=2.5, smooth:bool=True, lighting:bool=True, 
-                  ambient:float=1.0, diffuse:float=1.0, specular:float=1.0, specular_power:float=64.0, pbr:bool=True,
-                  metallic:float=1.0, roughness:float=1.0, color:str='green', file_name:str='Fermi_surface.pkl'
+    def LoadFermi(self, colormap:str=Colors().GrOrRd, BZ_width:float=2.5, smooth:bool=True, lighting:bool=True, 
+                  ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
+                  metallic:float=0.5, roughness:float=0.5, color:str='white', file_name:str='Fermi_surface.pkl',
+                  arrow:list=[]
         )->None:
         _ = self._GetBZ(BZ_width)
         with open(file_name, 'rb') as f:
@@ -511,4 +519,20 @@ class Isosurface(WFK):
                                 opacity=opacities,
                                 color=color
                 )
+        if arrow != []:
+            tail = np.array(arrow[0])
+            head = np.array(arrow[1])
+            tail = np.matmul(tail, self.rec_lattice)
+            head = np.matmul(head, self.rec_lattice)
+            direction = head - tail
+            scale = np.linalg.norm(direction)*(0.88)
+            py_arrow = pv.Arrow(start=tail,
+                                direction=direction,
+                                tip_radius=0.05,
+                                tip_length=0.15,
+                                shaft_radius=0.025,
+                                scale=scale
+            )
+            self.p.add_mesh(py_arrow, color='black')
+            self.p.add_point_labels([0,0,0], ['G'], always_visible=False)
         self._Render()
