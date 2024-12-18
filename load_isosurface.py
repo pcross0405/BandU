@@ -9,27 +9,47 @@ class LoadIsosurface(Isosurface):
         super().__init__(depth_peeling=depth_peeling)
     #-----------------------------------------------------------------------------------------------------------------#
     # method to add nesting vector to isosurface plot
-    def _AddArrow(self, arrow:list, rec_lattice:np.ndarray, color:str='black')->None:
-        if arrow != []:
-            tail = np.array(arrow[0])
-            shift = np.array(arrow[1])
-            tail = np.matmul(tail, rec_lattice)
-            shift = np.matmul(shift, rec_lattice)
-            scale = np.linalg.norm(shift)*(0.88)
-            py_arrow = pv.Arrow(start=tail,
-                                direction=shift,
-                                tip_radius=0.05/scale,
-                                tip_length=0.15,
-                                shaft_radius=0.025/scale,
-                                scale=scale
-            )
+    def _AddArrow(self, arrow:list, rec_lattice:np.ndarray, show_endpoints:bool, color:str)->None:
+        tail = np.array(arrow[0])
+        shift = np.array(arrow[1])
+        tail = np.matmul(tail, rec_lattice)
+        shift = np.matmul(shift, rec_lattice)
+        scale = np.linalg.norm(shift)
+        py_arrow = pv.Arrow(start=tail,
+                            direction=shift,
+                            tip_radius=0.05/scale,
+                            tip_length=0.15,
+                            shaft_radius=0.025/scale,
+                            scale=scale
+        )
+        if show_endpoints:
+            points = np.array([tail, shift+tail])
+            points = pv.PolyData(points)
+            self.p.add_mesh(points.points, point_size=10, color='red')
         self.p.add_mesh(py_arrow, color=color)
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method to add reciprocal axes
+    def _AddAxes(self, axes:np.ndarray):
+        axes_colors = ['red', 'green', 'blue']
+        for i in range(3):
+            axis = axes[i,:]
+            color = axes_colors[i]
+            self._AddArrow([[0,0,0], axis], np.identity(3), False, color)
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method to add periodic image of nesting vector
+    def _PeriodicArrow(self, arrow:list, cell:list, rec_lattice:np.ndarray, show_endpoints:bool):
+        tail = np.array(arrow[0])
+        cell = np.array(cell, dtype=float)
+        tail += cell
+        arrow[0] = tail
+        self._AddArrow(arrow, rec_lattice, show_endpoints, color='gray')
     #-----------------------------------------------------------------------------------------------------------------#
     # method to load previously calculated surface
     def LoadFile(self, colormap:str='plasma', BZ_width:float=2.5, smooth:bool=True, lighting:bool=True, 
-                    ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
-                    metallic:float=0.5, roughness:float=0.5, color:str='white', file_name:str='Fermi_surface.pkl',
-                    arrow:list=[], arrow_color:str='black', opacity:Union[float,list]=1.0
+                 ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
+                 metallic:float=0.5, roughness:float=0.5, color:str='white', file_name:str='Fermi_surface.pkl',
+                 arrow:list=[], arrow_color:str='black', show_endpoints:bool=False, periodic:list=[], 
+                 opacity:Union[float,list]=1.0, add_axes:bool=False
         )->None:
         '''
         Method for loading saved isosurface pickle and changing colors/adding nesting vectors
@@ -85,10 +105,19 @@ class LoadIsosurface(Isosurface):
         arrow_color : str
             Color of nesting arrow\n
             Default is black
+        show_endpoints : bool
+            Plot points on the end of the arrow to make visualizing start and end easier\n
+            Default is false
+        periodic : list
+            Adds periodic image of arrow that is translated [X,Y,Z] cells\n
+            Where X, Y, and Z are the cell indices
         opacity : float | list
             Specifies the opacity of each band\n
             If a single float is provided, all bands will be plotted with the same opacity\n
             If a list is provided, each band will be plotted with the opacity of the respective list element
+        add_axes : bool
+            Plots reciprocal cell axes with a* as red, b* as green, and c* as blue\n
+            Default is false
         '''
         with open(file_name, 'rb') as f:
             bands = pkl.load(f)
@@ -119,5 +148,9 @@ class LoadIsosurface(Isosurface):
                                 color=color
                 )
         if arrow != []:
-            self._AddArrow(arrow, rec_lattice, arrow_color)
+            self._AddArrow(arrow, rec_lattice, show_endpoints, arrow_color)
+        if periodic != []:
+            self._PeriodicArrow(arrow, periodic, rec_lattice, show_endpoints)
+        if add_axes:
+            self._AddAxes(rec_lattice)
         self._Render()
