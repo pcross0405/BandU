@@ -9,11 +9,16 @@ from pyvistaqt import BackgroundPlotter
 import pickle as pkl
 
 class Isosurface(WFK):
-    def __init__(self, filename:str, depth_peeling:bool=True, save:bool=False, empty_mesh:bool=False):
-        super().__init__(filename)
+    def __init__(self, filename:str='', depth_peeling:bool=True, save:bool=False, save_file:str='Fermi_surface.pkl', 
+                 empty_mesh:bool=False
+    )->None:
+        if filename != '':
+            super().__init__(filename)
         self.p = BackgroundPlotter(window_size=(600,400))
         self.save = save
-        self.band_count = None
+        self.save_file = save_file
+        if save_file != 'Fermi_surface.pkl':
+            self.save = True
         pv.global_theme.allow_empty_mesh = empty_mesh
         if depth_peeling:
             self.p.enable_depth_peeling(10)
@@ -169,11 +174,6 @@ class Isosurface(WFK):
             Irreducible set of kpoints, generally from GetValAndKpt
         values : np.ndarray
             Eigenvalues for irreducible kpoints, generally from GetValAndKpt
-        bands : np.ndarray
-            Band number that each kpoint belongs to
-        symtol : float
-            Used for checking symmetrically equivalent points outside of unit cell\n
-            Should be greater than 1, default is 1.001
         '''
         # get symmetry operations and initialize symmetrically equivalent point and value arrays
         sym_ops = self.symrel
@@ -244,7 +244,7 @@ class Isosurface(WFK):
                         strategy:str='null_value', null_value:float=None, isosurfaces:int=10, rng:list=None, 
                         smooth:bool=True, show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, 
                         show_vol:bool=False, scipy_interpolation:bool=False, width:float=0.0002, color:str='green',
-                        scalars:np.ndarray=None, overlap:np.ndarray=None, colormap:str=Colors().GrOrRd, 
+                        scalars:np.ndarray=None, overlap:np.ndarray=None, colormap:str='plasma', 
                         hull:np.ndarray=None, delaunay:bool=True, lighting:bool=True, ambient:float=0.5, 
                         diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
                         metallic:float=0.5, roughness:float=0.5
@@ -295,11 +295,10 @@ class Isosurface(WFK):
                                             strategy
             )
         if self.save:
-            with open('Fermi_surface.pkl', 'ab') as f:
+            with open(self.save_file, 'ab') as f:
                 pkl.dump(iso_surf, f)
                 pkl.dump(opacities, f)
                 pkl.dump(scalars, f)
-                pkl.dump(self.band_count, f)
         # open plotter and add meshes
         if show_outline:
             self.p.add_mesh(grid.outline())
@@ -424,8 +423,9 @@ class Isosurface(WFK):
         return vor_verts
     #-----------------------------------------------------------------------------------------------------------------#
     # Render isosurfaces
-    def _Render(self)->None:
-        self.p.add_text(f'Fermi Energy:{self.fermi} H', font_size=12)
+    def _Render(self, show_energy:bool=False)->None:
+        if show_energy:
+            self.p.add_text(f'Fermi Energy:{self.fermi} H', font_size=12)
         self.p.show()
         self.p.app.exec_()
     #-----------------------------------------------------------------------------------------------------------------#
@@ -436,7 +436,7 @@ class Isosurface(WFK):
                        show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, show_vol:bool=False,
                        scipy_interpolation:bool=False, width:float=0.0002, color:str='green', BandU:int=1,
                        energy_level:float=None, read_xsf:bool=True, xsf_root:str=None, xsf_nums:list=[1],
-                       bandu_width:float=None, BZ_width:float=2.5, delaunay:bool=True, colormap:str=Colors().GrOrRd, 
+                       bandu_width:float=None, BZ_width:float=2.5, delaunay:bool=True, colormap:str='plasma', 
                        lighting:bool=True, ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, 
                        specular_power:float=128.0, pbr:bool=False, metallic:float=0.5, roughness:float=0.5
         )->None:
@@ -463,7 +463,11 @@ class Isosurface(WFK):
         # get Brillouin zone and add it to plotter
         hull = self._GetBZ(BZ_width)
         # plot isosurface by band
-        self.band_count = bands
+        if self.save:
+            with open(self.save_file, 'ab') as f:
+                pkl.dump(bands, f)
+                pkl.dump(hull, f)
+                pkl.dump(self.rec_lattice, f)
         for band in bands:
             # get all eigenvalues for current iterated band
             energies = eigvals[:,band].reshape((len(eigvals[:,band]),1))
@@ -483,56 +487,4 @@ class Isosurface(WFK):
                                  metallic=metallic, roughness=roughness
             )
         # render plot
-        self._Render()
-    #-----------------------------------------------------------------------------------------------------------------#
-    # method to load previously calculated surface
-    def LoadFermi(self, colormap:str=Colors().GrOrRd, BZ_width:float=2.5, smooth:bool=True, lighting:bool=True, 
-                  ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
-                  metallic:float=0.5, roughness:float=0.5, color:str='white', file_name:str='Fermi_surface.pkl',
-                  arrow:list=[]
-        )->None:
-        _ = self._GetBZ(BZ_width)
-        with open(file_name, 'rb') as f:
-            _ = pkl.load(f)
-            _ = pkl.load(f)
-            _ = pkl.load(f)
-            bands = pkl.load(f)
-        with open(file_name, 'rb') as f:
-            for _ in bands:
-                iso_surf = pkl.load(f)
-                opacities = pkl.load(f)
-                scalars = pkl.load(f)
-                _ = pkl.load(f)
-                self.p.add_mesh(iso_surf, 
-                                style='surface',
-                                smooth_shading=smooth, 
-                                lighting=lighting,
-                                ambient=ambient,
-                                diffuse=diffuse,
-                                specular=specular,
-                                specular_power=specular_power,
-                                pbr=pbr,
-                                metallic=metallic,
-                                roughness=roughness,
-                                scalars=scalars,
-                                cmap=colormap,
-                                opacity=opacities,
-                                color=color
-                )
-        if arrow != []:
-            tail = np.array(arrow[0])
-            head = np.array(arrow[1])
-            tail = np.matmul(tail, self.rec_lattice)
-            head = np.matmul(head, self.rec_lattice)
-            direction = head - tail
-            scale = np.linalg.norm(direction)*(0.88)
-            py_arrow = pv.Arrow(start=tail,
-                                direction=direction,
-                                tip_radius=0.05,
-                                tip_length=0.15,
-                                shaft_radius=0.025,
-                                scale=scale
-            )
-            self.p.add_mesh(py_arrow, color='black')
-            self.p.add_point_labels([0,0,0], ['G'], always_visible=False)
         self._Render()
