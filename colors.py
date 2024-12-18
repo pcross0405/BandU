@@ -1,7 +1,10 @@
 import numpy as np
 from matplotlib.colors import ListedColormap
 
+# class for creating custom colormaps for isosurface
 class Colors():
+    #-----------------------------------------------------------------------------------------------------------------#
+    # define a few colormaps for easy plotting
     def __init__(self):
         self.reds = self.Colormap([np.array([125, 125, 125])/255, 
                                    np.array([255, 46, 31])/255
@@ -10,10 +13,20 @@ class Colors():
                                         np.array([255, 180, 31])/255, 
                                         np.array([26, 209, 23])/255
         ])
-        self.GrOrRd = self.Colormap([np.array([145, 145, 145])/255, 
-                                     np.array([255, 143, 31])/255, 
-                                     np.array([255, 46, 31])/255
+        self.WhBlRd = self.Colormap([np.array([255, 255, 255])/255, 
+                                     np.array([0, 0, 255])/255, 
+                                     np.array([255, 0, 0])/255
         ])
+        self.PlTlPk = self.Colormap([np.array([74, 2, 115])/255, 
+                                     np.array([11, 217, 210])/255, 
+                                     np.array([255, 0, 255])/255
+        ])
+        self.blues = self.Colormap([np.array([255, 255, 255])/255, 
+                                     np.array([75, 222, 222])/255, 
+                                     np.array([5, 47, 255])/255
+        ])
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method to create custom colormap from list of rgb codes
     def Colormap(self, colorlist:list)->ListedColormap:
         num = 250*(len(colorlist)-1)
         parts = 250
