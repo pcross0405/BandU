@@ -54,7 +54,7 @@ class AnalyzeSurface(Isosurface):
             norm /= np.linalg.norm(norm)
         else:
             vec = np.matmul(vecs, rec_lattice)
-            norm /= np.linalg.norm(vec)
+            norm = vec/np.linalg.norm(vec)
         norm_points = np.array(points/np.linalg.norm(points, axis=1).reshape((len(points),1)))
         angs = np.matmul(norm, norm_points.T)
         angs = np.abs(angs)
