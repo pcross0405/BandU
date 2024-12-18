@@ -1,6 +1,5 @@
 from wfk_class import WFK
 from xsf_reader import XSF
-from colors import Colors
 import numpy as np
 from scipy.fft import fftn
 from scipy.spatial import Voronoi, ConvexHull, Delaunay
