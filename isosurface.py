@@ -425,8 +425,12 @@ class Isosurface(WFK):
     def _Render(self, show_energy:bool=False)->None:
         if show_energy:
             self.p.add_text(f'Fermi Energy:{self.fermi} H', font_size=12)
-        self.p.show()
         self.p.enable_parallel_projection()
+        self.p.enable_custom_trackball_style(left='rotate',
+                                             shift_left='spin',
+                                             right='pan',
+        )
+        self.p.show()
         self.p.app.exec_()
     #-----------------------------------------------------------------------------------------------------------------#
     # wrapper around class methods to plot isosurface with one function call
