@@ -173,6 +173,7 @@ class AnalyzeSurface(Isosurface):
             Cross section is a 2D slice instead of a section\n
             Default is False
         '''
+        # read isosurface save file
         with open(file_name, 'rb') as f:
             bands = pkl.load(f)
             if type(opacity) == float:
@@ -185,31 +186,34 @@ class AnalyzeSurface(Isosurface):
                 opacities = pkl.load(f)
                 scalars = pkl.load(f)
                 if cross_section != []:
-                    opacities = self._CrossSection(cross_section, 
-                                                   iso_surf.points, 
-                                                   cross_width, 
-                                                   rec_lattice, 
-                                                   bz_points,
-                                                   linear=linear,
-                                                   two_dim=two_dim
+                    opacities = self._CrossSection(
+                        cross_section, 
+                        iso_surf.points, 
+                        cross_width, 
+                        rec_lattice, 
+                        bz_points,
+                        linear=linear,
+                        two_dim=two_dim
                     )
                 opacities = [opacity[i]*op for op in opacities]
-                self.p.add_mesh(iso_surf, 
-                                style='surface',
-                                smooth_shading=smooth, 
-                                lighting=lighting,
-                                ambient=ambient,
-                                diffuse=diffuse,
-                                specular=specular,
-                                specular_power=specular_power,
-                                pbr=pbr,
-                                metallic=metallic,
-                                roughness=roughness,
-                                scalars=scalars,
-                                cmap=colormap,
-                                opacity=opacities,
-                                color=color
+                self.p.add_mesh(
+                    iso_surf, 
+                    style='surface',
+                    smooth_shading=smooth, 
+                    lighting=lighting,
+                    ambient=ambient,
+                    diffuse=diffuse,
+                    specular=specular,
+                    specular_power=specular_power,
+                    pbr=pbr,
+                    metallic=metallic,
+                    roughness=roughness,
+                    scalars=scalars,
+                    cmap=colormap,
+                    opacity=opacities,
+                    color=color,
                 )
+        # plot additional arrows as axes and/or nesting vectors
         if arrow != []:
             self._AddArrow(arrow, rec_lattice, show_endpoints, arrow_color)
         if periodic != []:
@@ -220,4 +224,5 @@ class AnalyzeSurface(Isosurface):
             camera_position = np.array(camera_position).reshape((3,3))
             camera_position = np.matmul(camera_position, rec_lattice)
             self.p.camera_position = camera_position
+        # render plotter
         self._Render()
