@@ -327,10 +327,6 @@ class Isosurface(WFK):
         if show_vol:
             actor = self.p.add_volume(grid)
             actor.prop.interpolation_type = 'linear'
-        # arguments for customizing color bar
-        sargs = dict(
-            outline=True
-        )
         if show_isosurf:
             self.p.add_mesh(
                 iso_surf, 
@@ -348,7 +344,7 @@ class Isosurface(WFK):
                 cmap=colormap,
                 opacity=opacities,
                 color=color,
-                scalar_bar_args=sargs
+                show_scalar_bar=False
             )
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting isosurface color from BandU overlap with isosurface states
