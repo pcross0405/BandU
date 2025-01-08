@@ -13,7 +13,7 @@ class Colors():
                                         np.array([255, 180, 31])/255, 
                                         np.array([26, 209, 23])/255
         ])
-        self.WhBlRd = self.Colormap([np.array([255, 255, 255])/255, 
+        self.WhBlRd = self.Colormap([np.array([240, 240, 240])/255, 
                                      np.array([0, 0, 255])/255, 
                                      np.array([255, 0, 0])/255
         ])
@@ -21,7 +21,7 @@ class Colors():
                                      np.array([11, 217, 210])/255, 
                                      np.array([255, 0, 255])/255
         ])
-        self.blues = self.Colormap([np.array([255, 255, 255])/255, 
+        self.blues = self.Colormap([np.array([240, 240, 240])/255, 
                                      np.array([75, 222, 222])/255, 
                                      np.array([5, 47, 255])/255
         ])
