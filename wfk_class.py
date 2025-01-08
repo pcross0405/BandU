@@ -352,7 +352,9 @@ class WFK:
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
-    def _FFT(self, energy_level:float, width:float)->tuple[np.ndarray, int]:
+    def _FFT(
+            self, energy_level:float, width:float
+    )->tuple[np.ndarray, int]:
         # fermi_states is the number of states identified from the WFK file within the width about the energy_level
         # u_vecs are vectors of planewave coefficients for each state identified 
         # kpts are the H, K, L indices for the planewaves
@@ -380,14 +382,18 @@ class WFK:
         return u_vecs, fermi_states
     #-----------------------------------------------------------------------------------------------------------------#
     # method for normalizing wfks
-    def _Normalize(self, wfk:np.ndarray)->np.ndarray:
+    def _Normalize(
+            self, wfk:np.ndarray
+    )->np.ndarray:
         # calculate normalization constant and apply to wfk
         norm = np.sum(wfk*np.conj(wfk))
         wfk = wfk/np.sqrt(norm)
         return wfk
     #-----------------------------------------------------------------------------------------------------------------#
     # method for expanding a grid into XSF format
-    def _XSFFormat(self, eigfunc:np.ndarray)->np.ndarray:
+    def _XSFFormat(
+            self, eigfunc:np.ndarray
+    )->np.ndarray:
         # append zeros to ends of all axes in eigfunc
         # zeros get replaced by values at beginning of each axis
         # this is repetition is required by XSF format
@@ -414,7 +420,9 @@ class WFK:
         return eigfunc
     #-----------------------------------------------------------------------------------------------------------------#
     # method for calculating overlaps of states at specified energy level
-    def BandU(self, energy_level:float=None, states:int=None, width:float=0.005, XSFFormat:bool=True)->Generator:
+    def BandU(
+            self, energy_level:float=None, states:int=None, width:float=0.005, XSFFormat:bool=True
+    )->Generator:
         '''
         A generator for writing states to a numpy grid.
 
@@ -458,7 +466,9 @@ class WFK:
             yield eigfunc
     #-----------------------------------------------------------------------------------------------------------------#
     # method for writing wavefunctions to XSF file
-    def WriteXSF(self, xsf_file:str, state:np.ndarray, component:bool=True)->None:
+    def WriteXSF(
+            self, xsf_file:str, state:np.ndarray, component:bool=True
+    )->None:
         '''
         A method for writing numpy grids to an XSF formatted file
 
@@ -521,7 +531,9 @@ class WFK:
             self.WriteXSF(xsf_file, state, component=False)
     #-----------------------------------------------------------------------------------------------------------------#
     # a wrapper around BandU and WriteXSF for calling both in one line
-    def MakeXSF(self, xsf_name:str, energy_level:float=None, states:int=None, width:float=0.005)->None:
+    def MakeXSF(
+            self, xsf_name:str, energy_level:float=None, states:int=None, width:float=0.005
+    )->None:
         '''
         A wrapper arounf the BandU and WriteXSF methods for making XSF files in one line
 
