@@ -5,11 +5,15 @@ from isosurface import Isosurface
 from typing import Union
 
 class AnalyzeSurface(Isosurface):
-    def __init__(self, depth_peeling=True)->None:
+    def __init__(
+            self, depth_peeling=True
+    )->None:
         super().__init__(depth_peeling=depth_peeling)
     #-----------------------------------------------------------------------------------------------------------------#
     # method to add nesting vector to isosurface plot
-    def _AddArrow(self, arrow:list, rec_lattice:np.ndarray, show_endpoints:bool, color:str)->None:
+    def _AddArrow(
+            self, arrow:list, rec_lattice:np.ndarray, show_endpoints:bool, color:str
+    )->None:
         tail = np.array(arrow[0])
         shift = np.array(arrow[1])
         tail = np.matmul(tail, rec_lattice)
@@ -18,7 +22,7 @@ class AnalyzeSurface(Isosurface):
         py_arrow = pv.Arrow(start=tail,
                             direction=shift,
                             tip_radius=0.05/scale,
-                            tip_length=0.15,
+                            tip_length=0.15/scale,
                             shaft_radius=0.025/scale,
                             scale=scale
         )
@@ -29,7 +33,9 @@ class AnalyzeSurface(Isosurface):
         self.p.add_mesh(py_arrow, color=color)
     #-----------------------------------------------------------------------------------------------------------------#
     # method to add reciprocal axes
-    def _AddAxes(self, axes:np.ndarray)->None:
+    def _AddAxes(
+            self, axes:np.ndarray
+    )->None:
         axes_colors = ['red', 'green', 'blue']
         for i in range(3):
             axis = axes[i,:]
@@ -37,7 +43,9 @@ class AnalyzeSurface(Isosurface):
             self._AddArrow([[0,0,0], axis], np.identity(3), False, color)
     #-----------------------------------------------------------------------------------------------------------------#
     # method to add periodic image of nesting vector
-    def _PeriodicArrow(self, arrow:list, cell:list, rec_lattice:np.ndarray, show_endpoints:bool)->None:
+    def _PeriodicArrow(
+            self, arrow:list, cell:list, rec_lattice:np.ndarray, show_endpoints:bool
+    )->None:
         tail = np.array(arrow[0])
         cell = np.array(cell, dtype=float)
         tail += cell
@@ -45,7 +53,10 @@ class AnalyzeSurface(Isosurface):
         self._AddArrow(arrow, rec_lattice, show_endpoints, color='gray')
     #-----------------------------------------------------------------------------------------------------------------#
     # method to visualize cross-section of surface
-    def _CrossSection(self, vecs:list, points:np.ndarray, width:float, rec_lattice:np.ndarray, bz_points:np.ndarray):
+    def _CrossSection(
+            self, vecs:list, points:np.ndarray, width:float, rec_lattice:np.ndarray, bz_points:np.ndarray,
+            linear:bool=False, two_dim:bool=False
+    )->np.ndarray:
         from scipy.spatial import Delaunay
         if len(vecs) == 2:
             vec1 = np.matmul(vecs[0], rec_lattice)
@@ -57,20 +68,29 @@ class AnalyzeSurface(Isosurface):
             norm = vec/np.linalg.norm(vec)
         norm_points = np.array(points/np.linalg.norm(points, axis=1).reshape((len(points),1)))
         angs = np.matmul(norm, norm_points.T)
-        angs = np.abs(angs)
-        opacities = np.zeros(len(points))
-        opacities[angs <= width] = 1
+        if linear:
+            angs[angs <= width] = 2
+            angs -= 1
+            angs = np.abs(angs)
+        else:
+            if two_dim:
+                angs = np.abs(angs)
+            opacities = np.zeros(len(points))
+            opacities[angs <= width] = 1
+            angs = opacities  
         beyond_bz = Delaunay(bz_points).find_simplex(points)
-        opacities[beyond_bz < 0] = 0
-        return opacities
+        angs[beyond_bz < 0] = 0
+        return angs
     #-----------------------------------------------------------------------------------------------------------------#
     # method to load previously calculated surface
-    def Analysis(self, colormap:str='plasma', BZ_width:float=2.5, smooth:bool=True, lighting:bool=True, 
-                 ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
-                 metallic:float=0.5, roughness:float=0.5, color:str='white', file_name:str='Fermi_surface.pkl',
-                 arrow:list=[], arrow_color:str='black', show_endpoints:bool=False, periodic:list=[], 
-                 opacity:Union[float,list]=1.0, add_axes:bool=False, cross_section:list=[], cross_width:float=0.15
-        )->None:
+    def Analysis(
+            self, colormap:str='plasma', BZ_width:float=2.5, smooth:bool=True, lighting:bool=True, 
+            ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
+            metallic:float=0.5, roughness:float=0.5, color:str='white', file_name:str='Fermi_surface.pkl',
+            arrow:list=[], arrow_color:str='black', show_endpoints:bool=False, periodic:list=[], 
+            opacity:Union[float,list]=1.0, add_axes:bool=False, cross_section:list=[], cross_width:float=0.15,
+            linear:bool=False, two_dim:bool=False, camera_position:list=[]
+    )->None:
         '''
         Method for loading saved isosurface pickle and changing colors/adding nesting vectors
 
@@ -142,11 +162,16 @@ class AnalyzeSurface(Isosurface):
             Plot cross section through surface\n
             If one vector is provided, it is assumed to be the normal to the cross section plane\n
             Else, cross section is defined by plane made by two vectors\n
-            Vectors should be specified in reduced coordinates\n
-            This overwrites opacity setting
+            Vectors should be specified in reduced coordinates
         cross_width : float
             Width of cross section\n
             Default is 0.15
+        linear : bool
+            Cross section linearly fades out\n
+            Default is False
+        two_dim : bool
+            Cross section is a 2D slice instead of a section\n
+            Default is False
         '''
         with open(file_name, 'rb') as f:
             bands = pkl.load(f)
@@ -158,10 +183,17 @@ class AnalyzeSurface(Isosurface):
             for i, _ in enumerate(bands):
                 iso_surf = pkl.load(f)
                 opacities = pkl.load(f)
-                opacities = [opacity[i]*op for op in opacities]
                 scalars = pkl.load(f)
                 if cross_section != []:
-                    opacities = self._CrossSection(cross_section, iso_surf.points, cross_width, rec_lattice, bz_points)
+                    opacities = self._CrossSection(cross_section, 
+                                                   iso_surf.points, 
+                                                   cross_width, 
+                                                   rec_lattice, 
+                                                   bz_points,
+                                                   linear=linear,
+                                                   two_dim=two_dim
+                    )
+                opacities = [opacity[i]*op for op in opacities]
                 self.p.add_mesh(iso_surf, 
                                 style='surface',
                                 smooth_shading=smooth, 
@@ -184,4 +216,8 @@ class AnalyzeSurface(Isosurface):
             self._PeriodicArrow(arrow, periodic, rec_lattice, show_endpoints)
         if add_axes:
             self._AddAxes(rec_lattice)
+        if camera_position != []:
+            camera_position = np.array(camera_position).reshape((3,3))
+            camera_position = np.matmul(camera_position, rec_lattice)
+            self.p.camera_position = camera_position
         self._Render()
