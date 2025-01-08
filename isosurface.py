@@ -8,8 +8,9 @@ from pyvistaqt import BackgroundPlotter
 import pickle as pkl
 
 class Isosurface(WFK):
-    def __init__(self, filename:str='', depth_peeling:bool=True, save:bool=False, save_file:str='Fermi_surface.pkl', 
-                 empty_mesh:bool=False
+    def __init__(
+            self, filename:str='', depth_peeling:bool=True, save:bool=False, save_file:str='Fermi_surface.pkl', 
+            empty_mesh:bool=False
     )->None:
         if filename != '':
             super().__init__(filename)
@@ -20,10 +21,12 @@ class Isosurface(WFK):
             self.save = True
         pv.global_theme.allow_empty_mesh = empty_mesh
         if depth_peeling:
-            self.p.enable_depth_peeling(10)
+            self.p.enable_depth_peeling(number_of_peels=10)
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting eigenvalues and kpoints within specified energy range
-    def _GetValAndKpt(self, energy_level:float=None, width:float=0.0005)->tuple[np.ndarray, np.ndarray, list]:
+    def _GetValAndKpt(
+            self, energy_level:float=None, width:float=0.0005
+    )->tuple[np.ndarray, np.ndarray, list]:
         # default energy is fermi energy
         if energy_level == None:
             energy_level = self.fermi
@@ -45,7 +48,9 @@ class Isosurface(WFK):
         return iso_pts, iso_values, band_num
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting real space wavefunctions
-    def _FindOverlap(self, coeffs:np.ndarray, wfk_grid:np.ndarray, BandU:np.ndarray)->np.ndarray:
+    def _FindOverlap(
+            self, coeffs:np.ndarray, wfk_grid:np.ndarray, BandU:np.ndarray
+    )->np.ndarray:
         ngfft_grid = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
         overlaps = []
         for wfk in coeffs:
@@ -60,8 +65,9 @@ class Isosurface(WFK):
         return np.array(overlaps).real
     #-----------------------------------------------------------------------------------------------------------------#
     # method getting eigenvalues and kpts within defined energy range, also get overlap of BandU eigfuncs w/ states
-    def _GetOverlapValandKpt(self, BandU:np.ndarray, energy_level:float=None, width:float=0.0005
-        )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
+    def _GetOverlapValandKpt(
+            self, BandU:np.ndarray, energy_level:float=None, width:float=0.0005
+    )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
         # default energy is fermi energy
         if energy_level == None:
             energy_level = self.fermi
@@ -86,7 +92,9 @@ class Isosurface(WFK):
         return iso_pts, iso_values, band_num, overlaps
     #-----------------------------------------------------------------------------------------------------------------#
     # method constructing PyVista grid
-    def MakeGrid(self, points:np.ndarray, steps:tuple=(50,50,50))->pv.ImageData:
+    def MakeGrid(
+            self, points:np.ndarray, steps:tuple=(50,50,50)
+    )->pv.ImageData:
         '''
         Method for constructing PyVista grid used in interpolation prior to plotting
         *This method assumes your points are in Cartesian format*
@@ -126,8 +134,9 @@ class Isosurface(WFK):
         return grid
     #-----------------------------------------------------------------------------------------------------------------#
     # method translating points to fill grid space
-    def _TranslatePoints(self, points:np.ndarray, values:np.ndarray, lattice_vecs:np.ndarray
-        )->tuple[np.ndarray, np.ndarray]:
+    def _TranslatePoints(
+            self, points:np.ndarray, values:np.ndarray, lattice_vecs:np.ndarray
+    )->tuple[np.ndarray, np.ndarray]:
         npts = len(points)
         # translate points along each lattice direction to ensure grid space is filled
         trans_points = np.zeros((27*npts,3))
@@ -162,7 +171,9 @@ class Isosurface(WFK):
         return trans_points, trans_values
     #-----------------------------------------------------------------------------------------------------------------#
     # method for creating symmetrically equivalent points
-    def SymPtsAndVals(self, points:np.ndarray, values:np.ndarray)->tuple[np.ndarray, np.ndarray]:
+    def SymPtsAndVals(
+            self, points:np.ndarray, values:np.ndarray
+    )->tuple[np.ndarray, np.ndarray]:
         '''
         Method for generating full reciprocal space cell from irreducible kpoints\n
         *REQUIRES KPOINTS TO BE IN REDUCED FORMAT, CARTESIAN FORMAT WILL NOT WORK*
@@ -189,16 +200,18 @@ class Isosurface(WFK):
         return sym_pts, sym_vals
     #-----------------------------------------------------------------------------------------------------------------#
     # method for interpolating grid with Scipy Interpolation
-    def _ScipyInterpolate(self, grid_points:np.ndarray, interp_points:np.ndarray, values:np.ndarray, null_value:float
-        )->np.ndarray:
+    def _ScipyInterpolate(
+            self, grid_points:np.ndarray, interp_points:np.ndarray, values:np.ndarray, null_value:float
+    )->np.ndarray:
         from scipy.interpolate import griddata
         interp_vals = griddata(interp_points, values, grid_points, fill_value=null_value)
         return interp_vals
     #-----------------------------------------------------------------------------------------------------------------#
     # method for computing isosurface color from BandU overlaps
-    def _GetOverlapColor(self, grid:pv.ImageData, iso_surf_pts:np.ndarray, points:np.ndarray, overlap:np.ndarray,
-                         radius:float, sharpness:float, strategy:str
-        )->np.ndarray:
+    def _GetOverlapColor(
+            self, grid:pv.ImageData, iso_surf_pts:np.ndarray, points:np.ndarray, overlap:np.ndarray, radius:float, 
+            sharpness:float, strategy:str
+    )->np.ndarray:
         # make grid for interpolating overlap values
         color_grid = pv.ImageData()
         # same parameters as eigenvalue grid
@@ -208,10 +221,11 @@ class Isosurface(WFK):
         trans_color_pts, trans_overlap = self._TranslatePoints(points, overlap, self.rec_lattice)
         trans_color_pts = pv.PolyData(trans_color_pts)
         trans_color_pts['values'] = trans_overlap
-        color_grid = color_grid.interpolate(trans_color_pts, 
-                                            sharpness=sharpness, 
-                                            radius=radius, 
-                                            strategy=strategy,
+        color_grid = color_grid.interpolate(
+            trans_color_pts, 
+            sharpness=sharpness, 
+            radius=radius, 
+            strategy=strategy
         )
         # to project colors onto isosurface, use a closest point strategy
         # since grids have the same parameters, this gives accurate projection
@@ -223,7 +237,9 @@ class Isosurface(WFK):
         return color_values
     #-----------------------------------------------------------------------------------------------------------------#
     # method for determining which parts of the isosurface are within the Brillouin zone
-    def _SetOpacity(self, points:np.ndarray, hull_points:np.ndarray, delaunay:bool)->np.ndarray:
+    def _SetOpacity(
+            self, points:np.ndarray, hull_points:np.ndarray, delaunay:bool
+    )->np.ndarray:
         if delaunay:
             opacities = Delaunay(hull_points).find_simplex(points)
             opacities[opacities >= 0] = 1
@@ -238,16 +254,17 @@ class Isosurface(WFK):
         return opacities
     #-----------------------------------------------------------------------------------------------------------------#
     # method for making isosurface and creating PyVista plotter
-    def _MakeIsosurface(self, points:np.ndarray, values:np.ndarray, translation:np.ndarray=None, 
-                        grid:pv.ImageData=None, steps:tuple=None, radius:float=0.25, sharpness:float=2.0, 
-                        strategy:str='null_value', null_value:float=None, isosurfaces:int=10, rng:list=None, 
-                        smooth:bool=True, show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, 
-                        show_vol:bool=False, scipy_interpolation:bool=False, width:float=0.0002, color:str='green',
-                        scalars:np.ndarray=None, overlap:np.ndarray=None, colormap:str='plasma', 
-                        hull:np.ndarray=None, delaunay:bool=True, lighting:bool=True, ambient:float=0.5, 
-                        diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
-                        metallic:float=0.5, roughness:float=0.5
-        )->None:
+    def _MakeIsosurface(
+            self, points:np.ndarray, values:np.ndarray, translation:np.ndarray=None, 
+            grid:pv.ImageData=None, steps:tuple=None, radius:float=0.25, sharpness:float=2.0, 
+            strategy:str='null_value', null_value:float=None, isosurfaces:int=10, rng:list=None, 
+            smooth:bool=True, show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, 
+            show_vol:bool=False, scipy_interpolation:bool=False, width:float=0.0002, color:str='green',
+            scalars:np.ndarray=None, overlap:np.ndarray=None, colormap:str='plasma', 
+            hull:np.ndarray=None, delaunay:bool=True, lighting:bool=True, ambient:float=0.5, 
+            diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
+            metallic:float=0.5, roughness:float=0.5
+    )->None:
         # translate points to fill grid space
         if translation == None:
             translation = self.rec_lattice
@@ -263,17 +280,19 @@ class Isosurface(WFK):
         if null_value == None:
                 null_value = self.fermi+width/2*1.05
         if scipy_interpolation:
-            grid['values'] = self._ScipyInterpolate(grid.points, 
-                                                    trans_pts.points, 
-                                                    trans_pts['values'], 
-                                                    null_value
+            grid['values'] = self._ScipyInterpolate(
+                grid.points, 
+                trans_pts.points, 
+                trans_pts['values'], 
+                null_value
             )
         else:
-            grid = grid.interpolate(trans_pts, 
-                                    radius=radius, 
-                                    sharpness=sharpness, 
-                                    strategy=strategy, 
-                                    null_value=null_value,
+            grid = grid.interpolate(
+                trans_pts, 
+                radius=radius, 
+                sharpness=sharpness, 
+                strategy=strategy, 
+                null_value=null_value,
             )
         # create isosurface
         if rng == None:
@@ -285,13 +304,14 @@ class Isosurface(WFK):
             iso_surf = iso_surf.smooth_taubin(n_iter=100, pass_band=0.05)
         # find overlap colors on surface
         if type(overlap) == np.ndarray:
-            scalars = self._GetOverlapColor(grid, 
-                                            iso_surf.points, 
-                                            points, 
-                                            overlap,
-                                            radius,
-                                            sharpness,
-                                            strategy
+            scalars = self._GetOverlapColor(
+                grid, 
+                iso_surf.points, 
+                points, 
+                overlap,
+                radius,
+                sharpness,
+                strategy
             )
         if self.save:
             with open(self.save_file, 'ab') as f:
@@ -307,27 +327,34 @@ class Isosurface(WFK):
         if show_vol:
             actor = self.p.add_volume(grid)
             actor.prop.interpolation_type = 'linear'
+        # arguments for customizing color bar
+        sargs = dict(
+            outline=True
+        )
         if show_isosurf:
-            self.p.add_mesh(iso_surf, 
-                            style='surface',
-                            smooth_shading=smooth, 
-                            lighting=lighting,
-                            ambient=ambient,
-                            diffuse=diffuse,
-                            specular=specular,
-                            specular_power=specular_power,
-                            pbr=pbr,
-                            metallic=metallic,
-                            roughness=roughness,
-                            scalars=scalars,
-                            cmap=colormap,
-                            opacity=opacities,
-                            color=color,
+            self.p.add_mesh(
+                iso_surf, 
+                style='surface',
+                smooth_shading=smooth, 
+                lighting=lighting,
+                ambient=ambient,
+                diffuse=diffuse,
+                specular=specular,
+                specular_power=specular_power,
+                pbr=pbr,
+                metallic=metallic,
+                roughness=roughness,
+                scalars=scalars,
+                cmap=colormap,
+                opacity=opacities,
+                color=color,
+                scalar_bar_args=sargs
             )
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting isosurface color from BandU overlap with isosurface states
-    def _BandUColor(self, energy_level:float, width:float, states:int, xsf_root:str=None, xsf_nums:list=[1]
-        )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
+    def _BandUColor(
+            self, energy_level:float, width:float, states:int, xsf_root:str=None, xsf_nums:list=[1]
+    )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
         # function only used by _BandUColor for reading in all BandU XSF files necessary
         def _ReadXSFs()->np.ndarray:
             real_func = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
@@ -364,9 +391,13 @@ class Isosurface(WFK):
         return kpts, eigvals, bands, overlaps
     #-----------------------------------------------------------------------------------------------------------------#
     # method for finding Brillouin zone
-    def _GetBZ(self, BZ_width:float)->np.ndarray:
+    def _GetBZ(
+            self, BZ_width:float
+    )->np.ndarray:
         # function used only by _GetBZ
-        def CheckPts(pts:np.ndarray, verts:np.ndarray)->np.ndarray:
+        def CheckPts(
+                pts:np.ndarray, verts:np.ndarray
+        )->np.ndarray:
             # get cartesian coordinates
             verts = np.take(verts, pts, axis=0)
             # last point is the furthest, check if it is in same plane as other points
@@ -422,7 +453,9 @@ class Isosurface(WFK):
         return vor_verts
     #-----------------------------------------------------------------------------------------------------------------#
     # Render isosurfaces
-    def _Render(self, show_energy:bool=False)->None:
+    def _Render(
+            self, show_energy:bool=False
+    )->None:
         if show_energy:
             self.p.add_text(f'Fermi Energy:{self.fermi} H', font_size=12)
         self.p.enable_parallel_projection()
@@ -430,20 +463,22 @@ class Isosurface(WFK):
                                              shift_left='spin',
                                              right='pan',
         )
+        self.p.set_focus([0.0,0.0,0.0])
         self.p.show()
         self.p.app.exec_()
     #-----------------------------------------------------------------------------------------------------------------#
     # wrapper around class methods to plot isosurface with one function call
-    def PlotIsosurface(self, translation:np.ndarray=None, grid:pv.ImageData=None,
-                       steps:tuple=None, radius:float=0.25, sharpness:float=2.0, strategy:str='null_value', 
-                       null_value:float=None, isosurfaces:int=2, rng:list=None, smooth:bool=True, 
-                       show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, show_vol:bool=False,
-                       scipy_interpolation:bool=False, width:float=0.0002, color:str='green', BandU:int=1,
-                       energy_level:float=None, read_xsf:bool=True, xsf_root:str=None, xsf_nums:list=[1],
-                       bandu_width:float=None, BZ_width:float=2.5, delaunay:bool=True, colormap:str='plasma', 
-                       lighting:bool=True, ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, 
-                       specular_power:float=128.0, pbr:bool=False, metallic:float=0.5, roughness:float=0.5
-        )->None:
+    def PlotIsosurface(
+            self, translation:np.ndarray=None, grid:pv.ImageData=None,
+            steps:tuple=None, radius:float=0.25, sharpness:float=2.0, strategy:str='null_value', 
+            null_value:float=None, isosurfaces:int=2, rng:list=None, smooth:bool=True, 
+            show_outline:bool=False, show_points:bool=False, show_isosurf:bool=True, show_vol:bool=False,
+            scipy_interpolation:bool=False, width:float=0.0002, color:str='green', BandU:int=1,
+            energy_level:float=None, read_xsf:bool=True, xsf_root:str=None, xsf_nums:list=[1],
+            bandu_width:float=None, BZ_width:float=2.5, delaunay:bool=True, colormap:str='plasma', 
+            lighting:bool=True, ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, 
+            specular_power:float=128.0, pbr:bool=False, metallic:float=0.5, roughness:float=0.5
+    )->None:
         # find BandU eigen fxns and compute overlaps of eigen fxns with reciprocal space states
         # these overlap values will be used to color isosurface
         if read_xsf:
@@ -481,14 +516,15 @@ class Isosurface(WFK):
             else:
                 overlap = None
             # make PyVista surface objext
-            self._MakeIsosurface(kpts, energies, width=width, translation=translation, grid=grid, steps=steps, 
-                                 radius=radius, sharpness=sharpness, strategy=strategy, null_value=null_value, 
-                                 isosurfaces=isosurfaces, rng=rng, smooth=smooth, show_outline=show_outline, 
-                                 show_points=show_points, show_isosurf=show_isosurf, show_vol=show_vol, 
-                                 scipy_interpolation=scipy_interpolation, color=color, overlap=overlap, hull=hull,
-                                 delaunay=delaunay, colormap=colormap, lighting=lighting, ambient=ambient, 
-                                 diffuse=diffuse, specular=specular, specular_power=specular_power, pbr=pbr, 
-                                 metallic=metallic, roughness=roughness
+            self._MakeIsosurface(
+                kpts, energies, width=width, translation=translation, grid=grid, steps=steps, 
+                radius=radius, sharpness=sharpness, strategy=strategy, null_value=null_value, 
+                isosurfaces=isosurfaces, rng=rng, smooth=smooth, show_outline=show_outline, 
+                show_points=show_points, show_isosurf=show_isosurf, show_vol=show_vol, 
+                scipy_interpolation=scipy_interpolation, color=color, overlap=overlap, hull=hull,
+                delaunay=delaunay, colormap=colormap, lighting=lighting, ambient=ambient, 
+                diffuse=diffuse, specular=specular, specular_power=specular_power, pbr=pbr, 
+                metallic=metallic, roughness=roughness
             )
         # render plot
         self._Render()
