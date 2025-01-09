@@ -9,7 +9,7 @@ import pickle as pkl
 
 class Isosurface(WFK):
     def __init__(
-            self, filename:str='', depth_peeling:bool=True, save:bool=False, save_file:str='Fermi_surface.pkl', 
+            self, filename:str='', depth_peeling:bool=True, save:bool=True, save_file:str='Fermi_surface.pkl', 
             empty_mesh:bool=False
     )->None:
         if filename != '':
