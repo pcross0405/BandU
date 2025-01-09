@@ -44,13 +44,13 @@ class AnalyzeSurface(Isosurface):
     #-----------------------------------------------------------------------------------------------------------------#
     # method to add periodic image of nesting vector
     def _PeriodicArrow(
-            self, arrow:list, cell:list, rec_lattice:np.ndarray, show_endpoints:bool
+            self, arrow:list, cell:list, rec_lattice:np.ndarray, show_endpoints:bool, color:str
     )->None:
         tail = np.array(arrow[0])
         cell = np.array(cell, dtype=float)
         tail += cell
         arrow[0] = tail
-        self._AddArrow(arrow, rec_lattice, show_endpoints, color='gray')
+        self._AddArrow(arrow, rec_lattice, show_endpoints, color=color)
     #-----------------------------------------------------------------------------------------------------------------#
     # method to visualize cross-section of surface
     def _CrossSection(
@@ -217,7 +217,7 @@ class AnalyzeSurface(Isosurface):
         if arrow != []:
             self._AddArrow(arrow, rec_lattice, show_endpoints, arrow_color)
         if periodic != []:
-            self._PeriodicArrow(arrow, periodic, rec_lattice, show_endpoints)
+            self._PeriodicArrow(arrow, periodic, rec_lattice, show_endpoints, arrow_color)
         if add_axes:
             self._AddAxes(rec_lattice)
         if camera_position != []:
