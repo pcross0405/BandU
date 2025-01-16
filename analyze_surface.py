@@ -29,7 +29,7 @@ class AnalyzeSurface(Isosurface):
         if show_endpoints:
             points = np.array([tail, shift+tail])
             points = pv.PolyData(points)
-            self.p.add_mesh(points.points, point_size=10, color='red')
+            self.p.add_mesh(points.points, point_size=20, color='red')
         self.p.add_mesh(py_arrow, color=color)
     #-----------------------------------------------------------------------------------------------------------------#
     # method to add reciprocal axes
@@ -84,12 +84,12 @@ class AnalyzeSurface(Isosurface):
     #-----------------------------------------------------------------------------------------------------------------#
     # method to load previously calculated surface
     def Analysis(
-            self, colormap:str='plasma', BZ_width:float=2.5, smooth:bool=True, lighting:bool=True, 
+            self, colormap:str='plasma', BZ_width:float=2.5, BZ_show:bool=True, smooth:bool=True, lighting:bool=True, 
             ambient:float=0.5, diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
             metallic:float=0.5, roughness:float=0.5, color:str='white', file_name:str='Fermi_surface.pkl',
             arrow:list=[], arrow_color:str='black', show_endpoints:bool=False, periodic:list=[], 
             opacity:Union[float,list]=1.0, add_axes:bool=False, cross_section:list=[], cross_width:float=0.15,
-            linear:bool=False, two_dim:bool=False, camera_position:list=[]
+            linear:bool=False, two_dim:bool=True, camera_position:list=[]
     )->None:
         '''
         Method for loading saved isosurface pickle and changing colors/adding nesting vectors
@@ -103,12 +103,15 @@ class AnalyzeSurface(Isosurface):
         BZ_width : float
             Line width of Brillouin Zone\n
             Default is 2.5
+        BZ_show : bool
+            Show the Brillouin Zone
+            Default is to show (True)
         smooth : bool
             Use smooth lightning techniques\n
-            Default is True
+            Default is to use smoothing (True)
         lighting : bool
             Apply directional lighting to surface\n
-            Default is True
+            Default is to enable directional lighting (True)
         ambient : float
             Intensity of light on surface\n
             Default is 0.5
@@ -117,13 +120,13 @@ class AnalyzeSurface(Isosurface):
             Default is 0.5
         specular : float
             Amount of reflected light\n
-            Default is 1.0
+            Default is 1.0 (max)
         specular_power : float
             Determines how sharply light is reflected\n
             Default is 128.0 (max)
         pbr : bool
             Apply physics based rendering\n
-            Default is False
+            Default is no physics based rendering (False)
         metallic : float
             Determine how metallic-looking the surface is, only considered with pbr\n
             Default is 0.5
@@ -147,7 +150,7 @@ class AnalyzeSurface(Isosurface):
             Default is black
         show_endpoints : bool
             Plot points on the end of the arrow to make visualizing start and end easier\n
-            Default is false
+            Default is to not show endpoints (False)
         periodic : list
             Adds periodic image of arrow that is translated [X,Y,Z] cells\n
             Where X, Y, and Z are the cell indices
@@ -157,7 +160,7 @@ class AnalyzeSurface(Isosurface):
             If a list is provided, each band will be plotted with the opacity of the respective list element
         add_axes : bool
             Plots reciprocal cell axes with a* as red, b* as green, and c* as blue\n
-            Default is false
+            Default is to not show axes (False)
         cross_section : list
             Plot cross section through surface\n
             If one vector is provided, it is assumed to be the normal to the cross section plane\n
@@ -168,10 +171,10 @@ class AnalyzeSurface(Isosurface):
             Default is 0.15
         linear : bool
             Cross section linearly fades out\n
-            Default is False
+            Default is not fade out linearly (False)
         two_dim : bool
             Cross section is a 2D slice instead of a section\n
-            Default is False
+            Default is to show cross section as 2D slice (True)
         '''
         # read isosurface save file
         with open(file_name, 'rb') as f:
@@ -180,7 +183,8 @@ class AnalyzeSurface(Isosurface):
                 opacity = np.ones(len(bands))*opacity            
             bz_points = pkl.load(f)
             rec_lattice = pkl.load(f)
-            self.p.add_lines(bz_points, color='black', width=BZ_width)
+            if BZ_show:
+                self.p.add_lines(bz_points, color='black', width=BZ_width)
             for i, _ in enumerate(bands):
                 iso_surf = pkl.load(f)
                 opacities = pkl.load(f)
