@@ -19,17 +19,18 @@ class AnalyzeSurface(Isosurface):
         tail = np.matmul(tail, rec_lattice)
         shift = np.matmul(shift, rec_lattice)
         scale = np.linalg.norm(shift)
-        py_arrow = pv.Arrow(start=tail,
-                            direction=shift,
-                            tip_radius=0.05/scale,
-                            tip_length=0.15/scale,
-                            shaft_radius=0.025/scale,
-                            scale=scale
+        py_arrow = pv.Arrow(
+            start=tail,
+            direction=shift,
+            tip_radius=0.05/scale,
+            tip_length=0.15/scale,
+            shaft_radius=0.025/scale,
+            scale=scale
         )
         if show_endpoints:
             points = np.array([tail, shift+tail])
             points = pv.PolyData(points)
-            self.p.add_mesh(points.points, point_size=20, color='red')
+            self.p.add_mesh(points.points, point_size=10, color='black', render_points_as_spheres=True)
         self.p.add_mesh(py_arrow, color=color)
     #-----------------------------------------------------------------------------------------------------------------#
     # method to add reciprocal axes
