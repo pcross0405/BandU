@@ -2,6 +2,8 @@ import struct
 import numpy as np
 from scipy.fft import fftn
 from typing import Generator
+import sys
+np.set_printoptions(threshold=sys.maxsize)
 
 def bytes2float(bin_data):
     return struct.unpack('<d', bin_data)[0]
@@ -458,11 +460,25 @@ class WFK:
         # find new wavefunctions from combinations of u_vec wavefunctions
         eigfuncs = np.copy(u_vecs)
         eigfuncs = np.matmul(principal_vecs, u_vecs)
-        overlap_metric = np.matmul(principal_vecs[:states,:]*np.conj(principal_vecs[:states,:]),(principal_vecs[:states,:]*np.conj(principal_vecs[:states,:])).T)
-        print(overlap_metric[0,:])
+        orbital_chars = []
+        for i in range(len(eigfuncs)):
+            compare_func = eigfuncs[i,:]
+            compare_func = (compare_func*np.conj(compare_func)).real
+            orbital_char = np.zeros(len(compare_func))
+            orbital_char[compare_func >= 10**(-8)] = 1.0
+            orbital_chars.append(orbital_char)
+        first = orbital_chars[0]
+        total = np.sum(first)
+        for orb in orbital_chars:
+            common = orb + first
+            common[common < 2.0] = 0
+            common /= 2.0
+            percent = np.sum(common)/total
+            print(percent)
         # Normalize BandU eigenfunctions
         for i, eigfunc in enumerate(eigfuncs):
             eigfuncs[i] = self._Normalize(eigfunc)
+        return
         for i in range(states):
             print(f'Finding BandU eigenfunction {i+1} of {states}')
             # reshape eigfunc to a grid for the purpose of writing to XSF file
