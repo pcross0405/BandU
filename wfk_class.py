@@ -449,10 +449,17 @@ class WFK:
         overlap_mat = np.matmul(u_vecs, np.conj(u_vecs).T)
         # diagonalize matrix, since matrix is Hermitian we can use eigh function
         print('Diagonalizing overlap matrix')
-        _, principal_vecs = np.linalg.eig(overlap_mat)
+        principal_vals, principal_vecs = np.linalg.eig(overlap_mat)
+        # sort eigenvalues and vectors by order of eigenvalue
+        sorted_inds = np.flip(principal_vals.argsort())
+        principal_vecs = principal_vecs.T
+        principal_vals = np.take(principal_vals, sorted_inds)
+        principal_vecs = np.take(principal_vecs, sorted_inds, axis=0)
         # find new wavefunctions from combinations of u_vec wavefunctions
         eigfuncs = np.copy(u_vecs)
-        eigfuncs = np.matmul(principal_vecs.T, u_vecs)
+        eigfuncs = np.matmul(principal_vecs, u_vecs)
+        overlap_metric = np.matmul(principal_vecs[:states,:]*np.conj(principal_vecs[:states,:]),(principal_vecs[:states,:]*np.conj(principal_vecs[:states,:])).T)
+        print(overlap_metric[0,:])
         # Normalize BandU eigenfunctions
         for i, eigfunc in enumerate(eigfuncs):
             eigfuncs[i] = self._Normalize(eigfunc)
