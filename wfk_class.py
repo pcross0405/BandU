@@ -388,7 +388,7 @@ class WFK:
             self, wfk:np.ndarray
     )->np.ndarray:
         # calculate normalization constant and apply to wfk
-        norm = np.sum(wfk*np.conj(wfk))
+        norm = np.dot(wfk.flatten(), np.conj(wfk).flatten())
         wfk = wfk/np.sqrt(norm)
         return wfk
     #-----------------------------------------------------------------------------------------------------------------#
@@ -444,8 +444,8 @@ class WFK:
         if states == None or states > fermi_states:
             states = fermi_states
         # normalize wfks
-        for i, wfk in enumerate(u_vecs):
-            u_vecs[i] = self._Normalize(wfk)
+        #for i, wfk in enumerate(u_vecs):
+        #    u_vecs[i] = self._Normalize(wfk)
         # begin computing overlap of u_vecs
         print('Computing overlap matrix')
         overlap_mat = np.matmul(u_vecs, np.conj(u_vecs).T)
@@ -460,25 +460,12 @@ class WFK:
         # find new wavefunctions from combinations of u_vec wavefunctions
         eigfuncs = np.copy(u_vecs)
         eigfuncs = np.matmul(principal_vecs, u_vecs)
-        orbital_chars = []
-        for i in range(len(eigfuncs)):
-            compare_func = eigfuncs[i,:]
-            compare_func = (compare_func*np.conj(compare_func)).real
-            orbital_char = np.zeros(len(compare_func))
-            orbital_char[compare_func >= 10**(-8)] = 1.0
-            orbital_chars.append(orbital_char)
-        first = orbital_chars[0]
-        total = np.sum(first)
-        for orb in orbital_chars:
-            common = orb + first
-            common[common < 2.0] = 0
-            common /= 2.0
-            percent = np.sum(common)/total
-            print(percent)
-        # Normalize BandU eigenfunctions
-        for i, eigfunc in enumerate(eigfuncs):
-            eigfuncs[i] = self._Normalize(eigfunc)
-        return
+        # normalize eigfuncs
+        for i in range(len(principal_vals)):
+            eigfuncs[i,:] = self._Normalize(eigfuncs[i,:])
+        orb_overlap = np.matmul(np.abs(eigfuncs), np.conj(np.abs(eigfuncs)).T)
+        for i in range(60):
+            print(np.sum(orb_overlap[:,i]))
         for i in range(states):
             print(f'Finding BandU eigenfunction {i+1} of {states}')
             # reshape eigfunc to a grid for the purpose of writing to XSF file
