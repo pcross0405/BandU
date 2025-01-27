@@ -444,8 +444,8 @@ class WFK:
         if states == None or states > fermi_states:
             states = fermi_states
         # normalize wfks
-        #for i, wfk in enumerate(u_vecs):
-        #    u_vecs[i] = self._Normalize(wfk)
+        for i in range(fermi_states):
+            u_vecs[i,:] = self._Normalize(u_vecs[i,:])
         # begin computing overlap of u_vecs
         print('Computing overlap matrix')
         overlap_mat = np.matmul(u_vecs, np.conj(u_vecs).T)
@@ -461,11 +461,9 @@ class WFK:
         eigfuncs = np.copy(u_vecs)
         eigfuncs = np.matmul(principal_vecs, u_vecs)
         # normalize eigfuncs
-        for i in range(len(principal_vals)):
+        for i in range(fermi_states):
             eigfuncs[i,:] = self._Normalize(eigfuncs[i,:])
-        orb_overlap = np.matmul(np.abs(eigfuncs), np.conj(np.abs(eigfuncs)).T)
-        for i in range(60):
-            print(np.sum(orb_overlap[:,i]))
+        # convert to XSF format
         for i in range(states):
             print(f'Finding BandU eigenfunction {i+1} of {states}')
             # reshape eigfunc to a grid for the purpose of writing to XSF file
