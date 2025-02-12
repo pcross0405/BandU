@@ -439,6 +439,8 @@ class WFK:
         '''
         if energy_level == None:
             energy_level = self.fermi
+        else:
+            energy_level += self.fermi
         # apply FFT to reciprocal space wfks
         u_vecs, fermi_states = self._FFT(energy_level, width)
         if states == None or states > fermi_states:
@@ -448,7 +450,7 @@ class WFK:
             u_vecs[i,:] = self._Normalize(u_vecs[i,:])
         # begin computing overlap of u_vecs
         print('Computing overlap matrix')
-        overlap_mat = np.matmul(u_vecs, np.conj(u_vecs).T)
+        overlap_mat = np.matmul(np.conj(u_vecs), u_vecs.T)
         # diagonalize matrix, since matrix is Hermitian we can use eigh function
         print('Diagonalizing overlap matrix')
         principal_vals, principal_vecs = np.linalg.eig(overlap_mat)
@@ -457,6 +459,11 @@ class WFK:
         principal_vecs = principal_vecs.T
         principal_vals = np.take(principal_vals, sorted_inds)
         principal_vecs = np.take(principal_vecs, sorted_inds, axis=0)
+        # write output file
+        with open('eigenvalues.out', 'w') as f:
+            print(f'Width is {width}', file=f)
+            print(f'Calculated for states with energy {energy_level}', file=f)
+            print(principal_vals, file=f)
         # find new wavefunctions from combinations of u_vec wavefunctions
         eigfuncs = np.copy(u_vecs)
         eigfuncs = np.matmul(principal_vecs, u_vecs)
@@ -543,7 +550,7 @@ class WFK:
             self, xsf_name:str, energy_level:float=None, states:int=None, width:float=0.005
     )->None:
         '''
-        A wrapper arounf the BandU and WriteXSF methods for making XSF files in one line
+        A wrapper around the BandU and WriteXSF methods for making XSF files in one line
 
         Parameters
         ----------
