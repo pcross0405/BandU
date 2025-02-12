@@ -14,7 +14,7 @@ class Isosurface(WFK):
     )->None:
         if filename != '':
             super().__init__(filename)
-        self.p = BackgroundPlotter(window_size=(600,400))
+        self.p:pv.Plotter = BackgroundPlotter(window_size=(600,400))
         self.save = save
         self.save_file = save_file
         if save_file != 'Fermi_surface.pkl':
@@ -30,6 +30,8 @@ class Isosurface(WFK):
         # default energy is fermi energy
         if energy_level == None:
             energy_level = self.fermi
+        else:
+            energy_level += self.fermi
         # define upper and lower energy bounds
         min_nrg = energy_level - width/2
         max_nrg = energy_level + width/2
@@ -47,7 +49,7 @@ class Isosurface(WFK):
         band_num = set(band_num)
         return iso_pts, iso_values, band_num
     #-----------------------------------------------------------------------------------------------------------------#
-    # method for getting real space wavefunctions
+    # method for finding overlap value of BandU function with k-states
     def _FindOverlap(
             self, coeffs:np.ndarray, wfk_grid:np.ndarray, BandU:np.ndarray
     )->np.ndarray:
@@ -61,7 +63,7 @@ class Isosurface(WFK):
                 ngfft_grid[z][x][y] = wfk[i]
             ngfft_grid = fftn(ngfft_grid, norm='ortho')
             overlap = np.sum(np.conj(BandU)*ngfft_grid)
-            overlaps.append(np.abs(overlap))
+            overlaps.append(np.square(np.abs(overlap)))
         return np.array(overlaps).real
     #-----------------------------------------------------------------------------------------------------------------#
     # method getting eigenvalues and kpts within defined energy range, also get overlap of BandU eigfuncs w/ states
@@ -71,6 +73,8 @@ class Isosurface(WFK):
         # default energy is fermi energy
         if energy_level == None:
             energy_level = self.fermi
+        else:
+            energy_level = self.fermi + energy_level
         # define upper and lower energy bounds
         min_nrg = energy_level - width/2
         max_nrg = energy_level + width/2
@@ -263,7 +267,7 @@ class Isosurface(WFK):
             scalars:np.ndarray=None, overlap:np.ndarray=None, colormap:str='plasma', 
             hull:np.ndarray=None, delaunay:bool=True, lighting:bool=True, ambient:float=0.5, 
             diffuse:float=0.5, specular:float=1.0, specular_power:float=128.0, pbr:bool=False, 
-            metallic:float=0.5, roughness:float=0.5
+            metallic:float=0.5, roughness:float=0.5, energy_level:float=0.0
     )->None:
         # translate points to fill grid space
         if translation == None:
@@ -278,7 +282,7 @@ class Isosurface(WFK):
         trans_pts = pv.PolyData(trans_pts)
         trans_pts['values'] = trans_vals
         if null_value == None:
-                null_value = self.fermi+width/2*1.05
+                null_value = self.fermi+energy_level+width/2*1.05
         if scipy_interpolation:
             grid['values'] = self._ScipyInterpolate(
                 grid.points, 
@@ -297,7 +301,9 @@ class Isosurface(WFK):
         # create isosurface
         if rng == None:
             rng = [self.fermi, self.fermi]
-        iso_surf = grid.contour(isosurfaces=isosurfaces, rng=rng, method='contour')
+        else:
+            rng = [self.fermi + rng[0], self.fermi + rng[1]]
+        iso_surf:pv.PolyData = grid.contour(isosurfaces=isosurfaces, rng=rng, method='contour')
         opacities = self._SetOpacity(iso_surf.points, hull, delaunay)
         # apply Taubin smoothing
         if smooth:
@@ -344,7 +350,7 @@ class Isosurface(WFK):
                 cmap=colormap,
                 opacity=opacities,
                 color=color,
-                show_scalar_bar=False
+                show_scalar_bar=True
             )
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting isosurface color from BandU overlap with isosurface states
@@ -356,10 +362,10 @@ class Isosurface(WFK):
             real_func = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
             imag_func = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
             for num in xsf_nums:
-                real_path = xsf_root + f'_{num}_real.xsf'
+                real_path = xsf_root + f'_bandu_{num}_real.xsf'
                 real_xsf = XSF(real_path)
                 real_func += real_xsf.ReadDensity()
-                imag_path = xsf_root + f'_{num}_imag.xsf'
+                imag_path = xsf_root + f'_bandu_{num}_imag.xsf'
                 imag_xsf = XSF(imag_path)
                 imag_func += 1j*imag_xsf.ReadDensity()
             eigfunc = real_func + imag_func
@@ -369,9 +375,11 @@ class Isosurface(WFK):
             BandU_func = _ReadXSFs()
         # or calculate eigenfunction from WFK
         else:
-            raise NotImplementedError('''Currently this program only supports reading in density from an XSF file
-                                      Action: Set 'read_xsf' to True and provide 'xsf_path' with path to XSF file
-            ''')
+            raise NotImplementedError(
+                '''Currently this program only supports reading in density from an XSF file.
+                Action: Set 'read_xsf' to True and provide 'xsf_root' with the root name of the XSF file.
+                '''
+            )
             eigfuncs = []
             for eigfunc in self.BandU(energy_level=energy_level, width=width, states=states, XSFFormat=False):
                 eigfuncs.append(eigfunc)
@@ -520,7 +528,7 @@ class Isosurface(WFK):
                 scipy_interpolation=scipy_interpolation, color=color, overlap=overlap, hull=hull,
                 delaunay=delaunay, colormap=colormap, lighting=lighting, ambient=ambient, 
                 diffuse=diffuse, specular=specular, specular_power=specular_power, pbr=pbr, 
-                metallic=metallic, roughness=roughness
+                metallic=metallic, roughness=roughness, energy_level=energy_level
             )
         # render plot
         self._Render()

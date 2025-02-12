@@ -3,6 +3,8 @@ import pyvista as pv
 import numpy as np
 from isosurface import Isosurface
 from typing import Union
+from scipy.fft import fftn
+import matplotlib.pyplot as plt
 
 class AnalyzeSurface(Isosurface):
     def __init__(
@@ -30,7 +32,7 @@ class AnalyzeSurface(Isosurface):
         if show_endpoints:
             points = np.array([tail, shift+tail])
             points = pv.PolyData(points)
-            self.p.add_mesh(points.points, point_size=10, color='black', render_points_as_spheres=True)
+            self.p.add_mesh(points.points, point_size=20, color='black', render_points_as_spheres=True)
         self.p.add_mesh(py_arrow, color=color)
     #-----------------------------------------------------------------------------------------------------------------#
     # method to add reciprocal axes
@@ -177,25 +179,30 @@ class AnalyzeSurface(Isosurface):
             Cross section is a 2D slice instead of a section\n
             Default is to show cross section as 2D slice (True)
         '''
+        all_scalars = np.array([])
+        all_points = np.empty((1,3))
         # read isosurface save file
         with open(file_name, 'rb') as f:
-            bands = pkl.load(f)
+            bands:set = pkl.load(f)
             if type(opacity) == float:
                 opacity = np.ones(len(bands))*opacity            
-            bz_points = pkl.load(f)
-            rec_lattice = pkl.load(f)
+            bz_points:np.ndarray = pkl.load(f)
+            self.rec_lattice:np.ndarray = pkl.load(f)
             if BZ_show:
                 self.p.add_lines(bz_points, color='black', width=BZ_width)
             for i, _ in enumerate(bands):
-                iso_surf = pkl.load(f)
-                opacities = pkl.load(f)
-                scalars = pkl.load(f)
+                iso_surf:pv.PolyData = pkl.load(f)
+                opacities:np.ndarray = pkl.load(f)
+                scalars:np.ndarray = pkl.load(f)
+                scalars += 10**(-15)
+                all_scalars = np.append(all_scalars, scalars)
+                all_points = np.append(all_points, iso_surf.points, axis=0)
                 if cross_section != []:
                     opacities = self._CrossSection(
                         cross_section, 
                         iso_surf.points, 
                         cross_width, 
-                        rec_lattice, 
+                        self.rec_lattice, 
                         bz_points,
                         linear=linear,
                         two_dim=two_dim
@@ -215,19 +222,19 @@ class AnalyzeSurface(Isosurface):
                     roughness=roughness,
                     scalars=scalars,
                     cmap=colormap,
+                    clim=[np.min(scalars), np.max(scalars)],
                     opacity=opacities,
                     color=color,
                 )
-        # plot additional arrows as axes and/or nesting vectors
         if arrow != []:
-            self._AddArrow(arrow, rec_lattice, show_endpoints, arrow_color)
+            self._AddArrow(arrow, self.rec_lattice, show_endpoints, arrow_color)
         if periodic != []:
-            self._PeriodicArrow(arrow, periodic, rec_lattice, show_endpoints, arrow_color)
+            self._PeriodicArrow(arrow, periodic, self.rec_lattice, show_endpoints, arrow_color)
         if add_axes:
-            self._AddAxes(rec_lattice)
+            self._AddAxes(self.rec_lattice)
         if camera_position != []:
             camera_position = np.array(camera_position).reshape((3,3))
-            camera_position = np.matmul(camera_position, rec_lattice)
+            camera_position = np.matmul(camera_position, self.rec_lattice)
             self.p.camera_position = camera_position
         # render plotter
         self._Render()
