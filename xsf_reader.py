@@ -11,7 +11,11 @@ atom_labels = {1:'H', 2:'He', 3:'Li', 4:'Be', 5:'B', 6:'C', 7:'N', 8:'O', 9:'F',
                92:'U'}
 
 class XSF():
-    def __init__(self, xsf_file:str)->None:
+    def __init__(
+            self, 
+            xsf_file:str=None
+        )->None:
+    # if xsf file is supplied, read in parameters
         self.xsf_file = xsf_file
         with open(xsf_file, 'r') as xsf:
             self.xsf_lines = xsf.readlines()
@@ -44,22 +48,10 @@ class XSF():
                 self.ngfftz = ngfft_spacing[2]
                 return None
     #-----------------------------------------------------------------------------------------------------------------#
-    # method removing XSF formatting from density grid
-    def _RemoveXSF(self, grid:np.ndarray)->np.ndarray:
-        # to_be_del will be used to remove all extra data points added for XSF formatting
-        to_be_del = np.ones((self.ngfftz, self.ngfftx, self.ngffty), dtype=bool)
-        for z in range(self.ngfftz):
-            for x in range(self.ngfftx):
-                for y in range(self.ngffty):
-                    # any time you reach the last density point it is a repeat of the first point
-                    # remove the end points along each axis
-                    if y == self.ngffty - 1 or x == self.ngfftx - 1 or z == self.ngfftz - 1:
-                        to_be_del[z,x,y] = False
-        grid = grid[to_be_del]
-        return grid.reshape((self.ngfftz-1,self.ngfftx-1,self.ngffty-1))
-    #-----------------------------------------------------------------------------------------------------------------#
     # method reading in BandU eigenfunction from XSF
-    def ReadDensity(self, undo_xsf:bool=True)->np.ndarray:
+    def ReadDensity(
+        self
+    )->np.ndarray:
         '''
         Method for reading in density grid from XSF file. Returns grid as N dimensional numpy array.
 
@@ -86,7 +78,4 @@ class XSF():
         density_lines = [val for line in density_lines for val in line]
         density_lines = np.array(density_lines, dtype=float)
         density_lines = density_lines.reshape((self.ngfftz, self.ngfftx, self.ngffty))
-        # undo XSF formatting if desired
-        if undo_xsf:
-            density_lines = self._RemoveXSF(density_lines)
         return density_lines
