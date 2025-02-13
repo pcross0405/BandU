@@ -1,488 +1,282 @@
-import struct
 import numpy as np
-from scipy.fft import fftn
-from typing import Generator
+from scipy.fft import fftn, ifftn
 import sys
+from typing import Self
+from copy import copy
 np.set_printoptions(threshold=sys.maxsize)
 
-def bytes2float(bin_data):
-    return struct.unpack('<d', bin_data)[0]
-
-def bytes2int(bin_data):
-    return int.from_bytes(bin_data, 'little', signed=True)
-
-# method for converting real space lattice vectors to reciprocal space vectors
-def Real2Reciprocal(real_lat:np.ndarray)->np.ndarray:
+class WFK():
     '''
-    Method for converting the real space lattice parameters to reciprocal lattice parameters
+    A class manipulating wavefunctions from DFT calculations
 
     Parameters
     ----------
-    real_lat : np.ndarray
+    wfk_coeffs : np.ndarray
+        The planewave coefficients of the wavefunction
+        These should be complex values
+    kpoints : np.ndarray
+        A multidimensional array of 3D kpoints
+        Entries along axis 0 should be individual kpoints
+        Entries along axis 1 should be the kx, ky, and kz components, in that order
+        The kpoints should be in reduced form
+    syrmel : np.ndarray
+        A multidimensional array of 3x3 arrays of symmetry operations
+    nsym : int
+        Total number of symmetry operations
+    nkpt : int
+        Total number of kpoints
+        If a kpoints array is provided, then nkpt will be acquired the its length
+    nbands : int
+        Total number of bands
+    ngfftx : int
+        x dimension of Fourier transform grid
+    ngffty : int
+        y dimension of Fourier transform grid
+    ngfftz : int
+        z dimension of Fourier transform grid
+    eigenvalues : list
+        List of the eigenvalues for wavefunction at each band
+        Should be ordered from least -> greatest
+    fermi_energy : float
+        Fermi energy 
+    lattice : np.ndarray
+        3x3 array containing lattice parameters
+    natom : int
+        Total number of atoms in unit cell
+    xred : np.ndarray
+        Reduced coordinates of all atoms in unit cell
+        Individual atomic coordinates fill along axis 0
+        X, Y, and Z components fill along axis 1, in that order
+    typat : list
+        Numeric labels starting from 1 and incrementing up to natom
+        Order of labels should follow xred
+    znucltypat : list
+        List of element names
+        First element of list should correspond to typat label 1, second element to label 2 and so on
     '''
-    # conversion by default converts Angstrom to Bohr since ABINIT uses Bohr
-    a = real_lat[0,:]
-    b = real_lat[1,:]
-    c = real_lat[2,:]
-    vol = np.dot(a,np.cross(b,c))
-    b1 = 2*np.pi*(np.cross(b,c))/vol
-    b2 = 2*np.pi*(np.cross(c,a))/vol
-    b3 = 2*np.pi*(np.cross(a,b))/vol
-    return np.array([b1,b2,b3]).reshape((3,3))
-
-class WFK:
-    '''
-    A class for storing all variables from ABINIT WFK file
-    '''
-    def __init__(self, filename):
-        self.filename = filename
-        self.header = None
-        self.version = None
-        self.headform = None
-        self.fform = None
-        self.bandtot = None
-        self.date = None
-        self.intxc = None
-        self.ixc = None
-        self.natom = None
-        self.ngfftx = None
-        self.ngffty = None
-        self.ngfftz = None
-        self.nkpt = None
-        self.nspden = None
-        self.nspinor = None
-        self.nsppol = None 
-        self.nsym = None
-        self.npsp = None
-        self.ntypat = None
-        self.occopt = None
-        self.pertcase = None
-        self.usepaw = None
-        self.ecut = None
-        self.ecutdg = None
-        self.ecutsm = None
-        self.ecut_eff = None
-        self.qptnx = None
-        self.qptny = None
-        self.qptnz = None
-        self.real_lattice = None
-        self.rec_lattice = None
-        self.stmbias = None
-        self.tphysel = None
-        self.tsmear = None
-        self.usewvl = None
-        self.istwfk = None
-        self.bands = None
-        self.npwarr = None
-        self.so_psp = None
-        self.symafm = None
-        self.symrel = None
-        self.typat = None
-        self.kpts = None
-        self.occ = None
-        self.tnons = None
-        self.znucltypat = None
-        self.wtk = None
-        self.title = None
-        self.znuclpsp = None
-        self.zionpsp = None
-        self.pspso = None
-        self.pspdat = None
-        self.pspcod = None
-        self.pspxc = None
-        self.lmn_size = None
-        self.residm = None
-        self.xred = None
-        self.etotal = None
-        self.fermi = None
-        self._ReadHeader(self.filename)
+    def __init__(
+        self, 
+        wfk_coeffs:np.ndarray, kpoints:np.ndarray=None, symrel:np.ndarray=None, nsym:int=None, nkpt:int=None, 
+        nbands:int=None, ngfftx:int=None, ngffty:int=None, ngfftz:int=None, eigenvalues:list=None, 
+        fermi_energy:float=None, lattice:np.ndarray=None, natom:int=None, xred:np.ndarray=None, typat:list=None,
+        znucltypat:list=None
+    )->None:
+        self.wfk_coeffs=wfk_coeffs
+        self.kpoints=kpoints
+        self.symrel=symrel
+        self.nsym=nsym
+        self.nkpt=nkpt
+        if nkpt == None and kpoints != None:
+            self.nkpt=len(kpoints)
+        self.nbands=nbands
+        self.ngfftx=ngfftx
+        self.ngffty=ngffty
+        self.ngfftz=ngfftz
+        self.eigenvalues=eigenvalues
+        self.fermi_energy=fermi_energy
+        self.lattice=lattice
+        self.natom=natom
+        self.xred=xred
+        self.typat=typat,
+        self.znucltypat=znucltypat
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
-    # method to read wavefunction header
-    def _ReadHeader(self, filename)->None:
-        wfk = open(filename, 'rb')
-        print('Reading WFK header')
-        #---------------#
-        # unpack integers
-        self.header = bytes2int(wfk.read(4))
-        self.version = wfk.read(6).decode()
-        if self.version.strip().split('.')[0] != '7':
-            print(f'WARNING: currently only WFK files from ABINIT version 7 are supported')
-        self.headform = bytes2int(wfk.read(4))
-        self.fform = bytes2int(wfk.read(4))
-        wfk.read(8)
-        self.bandtot = bytes2int(wfk.read(4))
-        self.date = bytes2int(wfk.read(4))
-        self.intxc = bytes2int(wfk.read(4))
-        self.ixc = bytes2int(wfk.read(4))
-        self.natom = bytes2int(wfk.read(4))
-        self.ngfftx = bytes2int(wfk.read(4))
-        self.ngffty = bytes2int(wfk.read(4))
-        self.ngfftz = bytes2int(wfk.read(4))
-        self.nkpt = bytes2int(wfk.read(4))
-        self.nspden = bytes2int(wfk.read(4))
-        self.nspinor = bytes2int(wfk.read(4))
-        self.nsppol = bytes2int(wfk.read(4))
-        self.nsym = bytes2int(wfk.read(4))
-        self.npsp = bytes2int(wfk.read(4))
-        self.ntypat = bytes2int(wfk.read(4))
-        self.occopt = bytes2int(wfk.read(4))
-        self.pertcase = bytes2int(wfk.read(4))
-        self.usepaw = bytes2int(wfk.read(4))
-        if self.usepaw != 0:
-            print(f'WARNING: usepaw is {self.usepaw}, support has not been added for PAW potentials yet')
-        #--------------#
-        # unpack doubles
-        self.ecut = bytes2float(wfk.read(8))
-        self.ecutdg = bytes2float(wfk.read(8))
-        self.ecutsm = bytes2float(wfk.read(8))
-        self.ecut_eff = bytes2float(wfk.read(8))
-        self.qptnx = bytes2float(wfk.read(8))
-        self.qptny = bytes2float(wfk.read(8))
-        self.qptnz = bytes2float(wfk.read(8))
-        rprimd_ax = bytes2float(wfk.read(8))
-        rprimd_ay = bytes2float(wfk.read(8))
-        rprimd_az = bytes2float(wfk.read(8))
-        rprimd_bx = bytes2float(wfk.read(8))
-        rprimd_by = bytes2float(wfk.read(8))
-        rprimd_bz = bytes2float(wfk.read(8))
-        rprimd_cx = bytes2float(wfk.read(8))
-        rprimd_cy = bytes2float(wfk.read(8))
-        rprimd_cz = bytes2float(wfk.read(8))
-        #------------------------#
-        # convert Bohr to Angstrom
-        self.real_lattice = 0.529177*np.array([[rprimd_ax, rprimd_ay, rprimd_az],
-                                    [rprimd_bx, rprimd_by, rprimd_bz], 
-                                    [rprimd_cx, rprimd_cy, rprimd_cz]]).reshape((3,3))
-        self.rec_lattice = Real2Reciprocal(self.real_lattice)
-        self.stmbias = bytes2float(wfk.read(8))
-        self.tphysel = bytes2float(wfk.read(8))
-        self.tsmear = bytes2float(wfk.read(8))
-        #---------------#
-        # unpack integers
-        self.usewvl = bytes2int(wfk.read(4))
-        wfk.read(8)
-        self.istwfk = []
-        for i in range(self.nkpt):
-            val = bytes2int(wfk.read(4))
-            self.istwfk.append(val)
-            if val > 1:
-                print(f'WARNING: istwfk value {i} is greater than 1, considering rerunning ABINIT with kptopt 3')       
-        self.bands = []
-        for i in range(self.nkpt*self.nsppol):
-            val = bytes2int(wfk.read(4))
-            self.bands.append(val)
-        self.npwarr = []
-        for i in range(self.nkpt):
-            val = bytes2int(wfk.read(4))
-            self.npwarr.append(val)
-        self.so_psp = []
-        for i in range(self.npsp):
-            val = bytes2int(wfk.read(4))
-            self.so_psp.append(val)
-        self.symafm = []
-        for i in range(self.nsym):
-            val = bytes2int(wfk.read(4))
-            self.symafm.append(val)
-        self.symrel = []
-        for i in range(self.nsym):
-            arr = np.zeros((3,3))
-            arr[0,0] = bytes2int(wfk.read(4))
-            arr[1,0] = bytes2int(wfk.read(4))
-            arr[2,0] = bytes2int(wfk.read(4))
-            arr[0,1] = bytes2int(wfk.read(4))
-            arr[1,1] = bytes2int(wfk.read(4))
-            arr[2,1] = bytes2int(wfk.read(4))
-            arr[0,2] = bytes2int(wfk.read(4))
-            arr[1,2] = bytes2int(wfk.read(4))
-            arr[2,2] = bytes2int(wfk.read(4))
-            self.symrel.append(arr)
-        self.typat = []
-        for i in range(self.natom):
-            val = bytes2int(wfk.read(4))
-            self.typat.append(val)
-        #--------------#
-        # unpack doubles
-        self.kpts = []
-        for i in range(self.nkpt):
-            vec = np.zeros(3)
-            vec[0] = bytes2float(wfk.read(8))
-            vec[1] = bytes2float(wfk.read(8))
-            vec[2] = bytes2float(wfk.read(8))
-            self.kpts.append(vec)
-        self.occ = []
-        for i in range(self.bandtot):
-            val = bytes2float(wfk.read(8))
-            self.occ.append(val)
-        self.tnons = []
-        for i in range(self.nsym):
-            vec = np.zeros(3)
-            vec[0] = bytes2float(wfk.read(8))
-            vec[1] = bytes2float(wfk.read(8))
-            vec[2] = bytes2float(wfk.read(8))
-            self.tnons.append(vec)
-        self.znucltypat = []
-        for i in range(self.ntypat):
-            val = bytes2float(wfk.read(8))
-            self.znucltypat.append(val)
-        self.wtk = []           
-        for i in range(self.nkpt):
-            val = bytes2float(wfk.read(8))
-            self.wtk.append(val)
-        #-----------------------#
-        # unpack pseudopotentials
-        wfk.read(4)
-        self.title = self.znuclpsp = self.zionpsp = self.pspso = self.pspdat = self.pspcod = []
-        self.pspxc = self.lmn_size = []
-        for i in range(self.npsp):
-            wfk.read(4)
-            self.title.append(wfk.read(132).decode())
-            self.znuclpsp.append(bytes2float(wfk.read(8)))
-            self.zionpsp.append(bytes2float(wfk.read(8)))
-            self.pspso.append(bytes2int(wfk.read(4)))
-            self.pspdat.append(bytes2int(wfk.read(4)))
-            self.pspcod.append(bytes2int(wfk.read(4)))
-            self.pspxc.append(bytes2int(wfk.read(4)))
-            self.lmn_size.append(bytes2int(wfk.read(4)))
-            wfk.read(4)
-        #------------------#
-        # unpack coordinates
-        wfk.read(4)
-        self.residm = bytes2float(wfk.read(8))
-        self.xred = []
-        for i in range(self.natom):
-            vec = np.zeros(3)
-            vec[0] = bytes2float(wfk.read(8))
-            vec[1] = bytes2float(wfk.read(8))
-            vec[2] = bytes2float(wfk.read(8))
-            self.xred.append(vec)
-        #------------------------------------#
-        # unpack total energy and fermi energy
-        self.etotal = bytes2float(wfk.read(8))
-        self.fermi = bytes2float(wfk.read(8))
-        wfk.read(4)
-        print('WFK header read')
-        wfk.close()
-    #-----------------------------------------------------------------------------------------------------------------#
-    # method to read entire body of wavefunction file
-    def _ReadWFK(self)->Generator[list, list, list]:
-        wfk = open(self.filename, 'rb')
-        #-----------#
-        # skip header
-        wfk.read(298)
-        wfk.read(4*(2*self.nkpt + self.nkpt*self.nsppol + self.npsp + 10*self.nsym + self.natom))
-        wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + self.ntypat + 3*self.natom))
-        wfk.read(self.npsp*(176))
-        #-------------------------------#
-        # begin reading wavefunction body
-        for i in range(self.nsppol):
-            for j in range(self.nkpt):
-                print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
-                if j+1 == self.nkpt:
-                    print('\n', end='')
-                kpoints = []
-                eigenvalues = []
-                occupancies = []
-                coeffs = []
-                wfk.read(4)
-                npw = bytes2int(wfk.read(4))
-                self.nspinor = bytes2int(wfk.read(4))
-                nband_temp = bytes2int(wfk.read(4))
-                wfk.read(8)
-                for pw in range(npw):
-                    kx = bytes2int(wfk.read(4))
-                    ky = bytes2int(wfk.read(4))
-                    kz = bytes2int(wfk.read(4))
-                    kpoints.append((kx, ky, kz))
-                wfk.read(8)
-                for nband in range(nband_temp):
-                    eigenval = bytes2float(wfk.read(8))
-                    eigenvalues.append(eigenval)
-                for nband in range(nband_temp):
-                    occ = bytes2float(wfk.read(8))
-                    occupancies.append(occ)
-                wfk.read(4)
-                for nband in range(nband_temp):
-                    wfk.read(4)
-                    cg = []
-                    for pw in range(npw):
-                        cg1 = bytes2float(wfk.read(8))
-                        cg2 = bytes2float(wfk.read(8))
-                        cg.append(cg1 + 1j*cg2)
-                    coeffs.append(cg)
-                    wfk.read(4)            
-                yield eigenvalues, coeffs, kpoints
-        print('WFK body read')
-        wfk.close()
-    #-----------------------------------------------------------------------------------------------------------------#
-    # method to read only eigenvalues from body of wavefunction file
-    def _ReadEigenvalues(self):
-        wfk = open(self.filename, 'rb')
-        #-----------#
-        # skip header
-        wfk.read(298)
-        wfk.read(4*(2*self.nkpt + self.nkpt*self.nsppol + self.npsp + 10*self.nsym + self.natom))
-        wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + self.ntypat + 3*self.natom))
-        wfk.read(self.npsp*(176))
-        #-------------------------------#
-        # begin reading wavefunction body
-        for i in range(self.nsppol):
-            for j in range(self.nkpt):
-                print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
-                if j+1 == self.nkpt:
-                    print('\n', end='')
-                eigenvalues = []
-                wfk.read(4)
-                npw = bytes2int(wfk.read(4))
-                self.nspinor = bytes2int(wfk.read(4))
-                nband_temp = bytes2int(wfk.read(4))
-                wfk.read(8)
-                wfk.read(12*npw)
-                wfk.read(8)
-                #------------------------------------------------------------------#
-                # only need eigenvalues for Fermi surface, skip over everything else
-                for nband in range(nband_temp):
-                    eigenval = bytes2float(wfk.read(8))
-                    eigenvalues.append(eigenval)
-                
-                wfk.read(nband_temp*8)
-                wfk.read(4)
-                wfk.read(nband_temp*(8 + npw*16))
-                yield eigenvalues
-        print('WFK body read')
-        wfk.close()
+    # method transforming reciprocal space wfks to real space
+    def GridWFK(
+            self, band_index:int=None
+    )->Self:
+        '''
+        Returns copy of WFK object with coefficients in numpy 3D array grid.
+        Grid is organized in (ngfftz, ngfftx, ngffty) dimensions.
+        Where ngfft_ represents the _ Fourier transform grid dimension.
+
+        Parameters
+        ----------
+        band_index : int
+            Integer represent the band index of the wavefunction coefficients to be transformed.
+            If nothing is passed, it is assumed the coefficients of a single band are supplied.
+        '''
+        # initialize 3D grid
+        gridded_wfk = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
+        # update grid with wfk coefficients
+        for k, kpt in enumerate(self.kpoints):
+            kx = kpt[0]
+            ky = kpt[1]
+            kz = kpt[2]
+            if band_index != None:
+                gridded_wfk[kz, kx, ky] = self.wfk_coeffs[band_index][k]
+            else:
+                gridded_wfk[kz, kx, ky] = self.wfk_coeffs[k]
+        new_WFK = copy(self)
+        new_WFK.wfk_coeffs = gridded_wfk
+        return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
-    def _FFT(
-            self, energy_level:float, width:float
-    )->tuple[np.ndarray, int]:
-        # fermi_states is the number of states identified from the WFK file within the width about the energy_level
-        # u_vecs are vectors of planewave coefficients for each state identified 
-        # kpts are the H, K, L indices for the planewaves
-        fermi_states = 0
-        u_vecs = []
-        for eigenvals, coeffs, kpts in self._ReadWFK():
-            for i, band in enumerate(eigenvals):
-                if energy_level - width/2 <= band <= energy_level + width/2:
-                    fermi_states += 1
-                    # planewave coefficients are first mapped to grid for FFT
-                    grid_wfk = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
-                    for k, kpoint in enumerate(kpts):
-                        kx = kpoint[0]
-                        ky = kpoint[1]
-                        kz = kpoint[2]
-                        grid_wfk[kz][kx][ky] = coeffs[i][k]
-                    grid_wfk = fftn(grid_wfk, norm='ortho')
-                    u_vecs.append(grid_wfk)
-        # after FFT the wfk coefficients are reshaped from grid to vector for subsequent matrix operations
-        u_vecs = np.array(u_vecs).reshape(fermi_states, self.ngfftx*self.ngffty*self.ngfftz)
-        if fermi_states == 0:
-            raise ValueError(f'''Identified 0 states within provided width.
-            Action: Increase width or increase fineness of kpoint mesh.
-            ''')
-        return u_vecs, fermi_states
+    def FFT(
+            self
+    )->None:
+        '''
+        Returns copy of WFK with wavefunction coefficients in expressed in real space.
+        Assumes existing wavefunction coefficients are expressed in reciprocal space. 
+        '''
+        # Fourier transform reciprocal grid to real space grid
+        real_coeffs = fftn(self.wfk_coeffs, norm='ortho')
+        new_WFK = copy(self)
+        new_WFK.wfk_coeffs = real_coeffs
+        return new_WFK
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method transforming real space wfks to reciprocal space
+    def IFFT(
+            self
+    )->Self:
+        '''
+        Returns copy of WFK with wavefunction coefficients in expressed in reciprocal space.
+        Assumes existing wavefunction coefficients are expressed in real space. 
+        '''
+        # Fourier transform real space grid to reciprocal space grid
+        reciprocal_coeffs = ifftn(self.wfk_coeffs, norm='ortho')
+        new_WFK = copy(self)
+        new_WFK.wfk_coeffs = reciprocal_coeffs
+        return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method for normalizing wfks
-    def _Normalize(
-            self, wfk:np.ndarray
-    )->np.ndarray:
+    def Normalize(
+            self
+    )->Self:
+        '''
+        Returns copy of WFK object with normalized wavefunction coefficients such that <psi|psi> = 1.
+        '''
         # calculate normalization constant and apply to wfk
-        norm = np.dot(wfk.flatten(), np.conj(wfk).flatten())
-        wfk = wfk/np.sqrt(norm)
-        return wfk
+        norm = np.dot(self.wfk_coeffs.flatten(), np.conj(self.wfk_coeffs).flatten())
+        norm = np.sqrt(norm)
+        new_WFK = copy(self)
+        new_WFK.wfk_coeffs /= norm
+        return new_WFK
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for converting real space lattice vectors to reciprocal space vectors
+    def Real2Reciprocal(
+            real_lat:np.ndarray
+    )->np.ndarray:
+        '''
+        Method for converting the real space lattice parameters to reciprocal lattice parameters
+
+        Parameters
+        ----------
+        real_lat : np.ndarray
+            3x3 numpy array containing real space lattice parameters.
+        '''
+        # conversion by default converts Angstrom to Bohr since ABINIT uses Bohr
+        a = real_lat[0,:]
+        b = real_lat[1,:]
+        c = real_lat[2,:]
+        vol = np.dot(a,np.cross(b,c))
+        b1 = 2*np.pi*(np.cross(b,c))/vol
+        b2 = 2*np.pi*(np.cross(c,a))/vol
+        b3 = 2*np.pi*(np.cross(a,b))/vol
+        return np.array([b1,b2,b3]).reshape((3,3))
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for creating symmetrically equivalent points
+    def Symmetrize(
+            self, points:np.ndarray=None, values:np.ndarray=None
+    )->tuple[np.ndarray, np.ndarray]:
+        '''
+        Method for generating full reciprocal space cell from irreducible kpoints\n
+        *REQUIRES KPOINTS TO BE IN REDUCED FORMAT, CARTESIAN FORMAT WILL NOT WORK*
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Irreducible set of kpoints
+        values : np.ndarray
+            Eigenvalues for irreducible kpoints
+        '''
+        # get symmetry operations and initialize symmetrically equivalent point and value arrays
+        sym_ops = self.symrel
+        ind_len = self.nkpt
+        sym_pts = np.zeros((self.nsym*ind_len,3))
+        sym_vals = np.zeros((self.nsym*ind_len,self.nbands))
+        for i, op in enumerate(sym_ops):
+            new_pts = np.matmul(points, op)
+            sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
+            sym_vals[i*ind_len:(i+1)*ind_len,:] = values
+        # points overlap on at edges of each symmetric block, remove duplicates
+        sym_pts, unique_inds = np.unique(sym_pts, return_index=True, axis=0)
+        sym_vals = np.take(sym_vals, unique_inds, axis=0)
+        if points == None:
+            return sym_vals
+        elif values == None:
+            return sym_pts
+        else:
+            return sym_pts, sym_vals
     #-----------------------------------------------------------------------------------------------------------------#
     # method for expanding a grid into XSF format
-    def _XSFFormat(
-            self, eigfunc:np.ndarray
-    )->np.ndarray:
-        # append zeros to ends of all axes in eigfunc
+    def XSFFormat(
+            self
+    )->Self:
+        '''
+        Returns copy of WFK object XSF formatted coefficients.
+        Requires wfk_coeffs to be in gridded format, i.e. (ngfftz, ngfftx, ngffty) shape.
+        '''
+        # append zeros to ends of all axes in grid_wfk
         # zeros get replaced by values at beginning of each axis
         # this is repetition is required by XSF format
-        eigfunc = np.append(eigfunc, np.zeros((1, self.ngfftx, self.ngffty)), axis=0)
-        eigfunc = np.append(eigfunc, np.zeros((self.ngfftz+1, 1, self.ngffty)), axis=1)
-        eigfunc = np.append(eigfunc, np.zeros((self.ngfftz+1, self.ngfftx+1, 1)), axis=2)
+        if np.shape(self.wfk_coeffs) != (self.ngfftz, self.ngfftx, self.ngffty):
+            raise ValueError(
+                f'''Passed array is not the correct shape:
+                Expected: ({self.ngfftz}, {self.ngfftx}, {self.ngffty}),
+                Received: {np.shape(self.wfk_coeffs)}
+            ''')
+        else:
+            grid_wfk = self.wfk_coeffs
+        grid_wfk = np.append(grid_wfk, np.zeros((1, self.ngfftx, self.ngffty)), axis=0)
+        grid_wfk = np.append(grid_wfk, np.zeros((self.ngfftz+1, 1, self.ngffty)), axis=1)
+        grid_wfk = np.append(grid_wfk, np.zeros((self.ngfftz+1, self.ngfftx+1, 1)), axis=2)
         for x in range(self.ngfftx+1):
             for y in range(self.ngffty+1):
                 for z in range(self.ngfftz+1):
                     if x == self.ngfftx:
-                        eigfunc[z][x][y] = eigfunc[z][0][y]
+                        grid_wfk[z][x][y] = grid_wfk[z][0][y]
                     if y == self.ngffty:
-                        eigfunc[z][x][y] = eigfunc[z][x][0]
+                        grid_wfk[z][x][y] = grid_wfk[z][x][0]
                     if z == self.ngfftz:
-                        eigfunc[z][x][y] = eigfunc[0][x][y]
+                        grid_wfk[z][x][y] = grid_wfk[0][x][y]
                     if x == self.ngfftx and y == self.ngffty:
-                        eigfunc[z][x][y] = eigfunc[z][0][0]
+                        grid_wfk[z][x][y] = grid_wfk[z][0][0]
                     if x == self.ngfftx and z == self.ngfftz:
-                        eigfunc[z][x][y] = eigfunc[0][0][y]
+                        grid_wfk[z][x][y] = grid_wfk[0][0][y]
                     if z == self.ngfftz and y == self.ngffty:
-                        eigfunc[z][x][y] = eigfunc[0][x][0]
+                        grid_wfk[z][x][y] = grid_wfk[0][x][0]
                     if x == self.ngfftx and y == self.ngffty and z == self.ngfftz:
-                        eigfunc[z][x][y] = eigfunc[0][0][0]
-        return eigfunc
+                        grid_wfk[z][x][y] = grid_wfk[0][0][0]
+        new_WFK = copy(self)
+        new_WFK.wfk_coeffs = grid_wfk
+        return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
-    # method for calculating overlaps of states at specified energy level
-    def BandU(
-            self, energy_level:float=None, states:int=None, width:float=0.005, XSFFormat:bool=True
-    )->Generator:
+    # method removing XSF formatting from density grid
+    def RemoveXSF(
+        self
+    )->Self:
         '''
-        A generator for writing states to a numpy grid.
-
-        Parameters
-        ----------
-        energy_level : float
-            This defines what energy level to look for states at, default is the Fermi energy
-        states : int
-            This defines how many grids are generated, default is all states found
-        width : float
-            This defines the upper and lower bounds on the energy_level, default is 0.005 Hartree
+        Returns copy of WFK object without XSF formatting.
         '''
-        if energy_level == None:
-            energy_level = self.fermi
-        else:
-            energy_level += self.fermi
-        # apply FFT to reciprocal space wfks
-        u_vecs, fermi_states = self._FFT(energy_level, width)
-        if states == None or states > fermi_states:
-            states = fermi_states
-        # normalize wfks
-        for i in range(fermi_states):
-            u_vecs[i,:] = self._Normalize(u_vecs[i,:])
-        # begin computing overlap of u_vecs
-        print('Computing overlap matrix')
-        overlap_mat = np.matmul(np.conj(u_vecs), u_vecs.T)
-        # diagonalize matrix, since matrix is Hermitian we can use eigh function
-        print('Diagonalizing overlap matrix')
-        principal_vals, principal_vecs = np.linalg.eig(overlap_mat)
-        # sort eigenvalues and vectors by order of eigenvalue
-        sorted_inds = np.flip(principal_vals.argsort())
-        principal_vecs = principal_vecs.T
-        principal_vals = np.take(principal_vals, sorted_inds)
-        principal_vecs = np.take(principal_vecs, sorted_inds, axis=0)
-        # write output file
-        with open('eigenvalues.out', 'w') as f:
-            print(f'Width is {width}', file=f)
-            print(f'Calculated for states with energy {energy_level}', file=f)
-            print(principal_vals, file=f)
-        # find new wavefunctions from combinations of u_vec wavefunctions
-        eigfuncs = np.copy(u_vecs)
-        eigfuncs = np.matmul(principal_vecs, u_vecs)
-        # normalize eigfuncs
-        for i in range(fermi_states):
-            eigfuncs[i,:] = self._Normalize(eigfuncs[i,:])
-        # convert to XSF format
-        for i in range(states):
-            print(f'Finding BandU eigenfunction {i+1} of {states}')
-            # reshape eigfunc to a grid for the purpose of writing to XSF file
-            eigfunc = eigfuncs[i].reshape((self.ngfftz, self.ngfftx, self.ngffty))
-            # convert grid to XSF format
-            if XSFFormat:
-                eigfunc = self._XSFFormat(eigfunc)
-            yield eigfunc
+        grid = self.wfk_coeffs
+        # to_be_del will be used to remove all extra data points added for XSF formatting
+        to_be_del = np.ones((self.ngfftz, self.ngfftx, self.ngffty), dtype=bool)
+        for z in range(self.ngfftz):
+            for x in range(self.ngfftx):
+                for y in range(self.ngffty):
+                    # any time you reach the last density point it is a repeat of the first point
+                    # remove the end points along each axis
+                    if y == self.ngffty - 1 or x == self.ngfftx - 1 or z == self.ngfftz - 1:
+                        to_be_del[z,x,y] = False
+        new_WFK = copy(self)
+        new_WFK.wfk_coeffs = grid
+        return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method for writing wavefunctions to XSF file
     def WriteXSF(
-            self, xsf_file:str, state:np.ndarray, component:bool=True
+            self, xsf_file:str, _component:bool=True
     )->None:
         '''
         A method for writing numpy grids to an XSF formatted file
@@ -491,11 +285,12 @@ class WFK:
         ----------
         xsf_file : str
             The file name
-        state : numpy ndarry
-            The grid to be written to an XSF
         '''
+        # check if typat is packed as tuple or not
+        if type(self.typat) == tuple:
+            self.typat = self.typat[0]
         # first run writes out real part of eigenfunction to xsf
-        if component:
+        if _component:
             xsf_file += '_real.xsf'
         # second run writes out imaginary part
         else:
@@ -504,66 +299,43 @@ class WFK:
             print('DIM-GROUP', file=xsf)
             print('3 1', file=xsf)
             print('PRIMVEC', file=xsf)
-            print(f'{self.real_lattice[0,0]} {self.real_lattice[0,1]} {self.real_lattice[0,2]}', file=xsf)
-            print(f'{self.real_lattice[1,0]} {self.real_lattice[1,1]} {self.real_lattice[1,2]}', file=xsf)
-            print(f'{self.real_lattice[2,0]} {self.real_lattice[2,1]} {self.real_lattice[2,2]}', file=xsf)
+            print(f'{self.lattice[0,0]} {self.lattice[0,1]} {self.lattice[0,2]}', file=xsf)
+            print(f'{self.lattice[1,0]} {self.lattice[1,1]} {self.lattice[1,2]}', file=xsf)
+            print(f'{self.lattice[2,0]} {self.lattice[2,1]} {self.lattice[2,2]}', file=xsf)
             print('PRIMCOORD', file=xsf)
             print(f'{self.natom} 1', file=xsf)
             for i, coord in enumerate(self.xred):
                 atomic_num = int(self.znucltypat[self.typat[i] - 1])
-                cart_coord = np.dot(coord, self.real_lattice)
+                cart_coord = np.dot(coord, self.lattice)
                 print(f'{atomic_num} {cart_coord[0]} {cart_coord[1]} {cart_coord[2]}', file=xsf)
             print('ATOMS', file=xsf)
             for i, coord in enumerate(self.xred):
                 atomic_num = int(self.znucltypat[self.typat[i] - 1])
-                cart_coord = np.dot(coord, self.real_lattice)
+                cart_coord = np.dot(coord, self.lattice)
                 print(f'{atomic_num} {cart_coord[0]} {cart_coord[1]} {cart_coord[2]}', file=xsf)
             print('BEGIN_BLOCK_DATAGRID3D', file=xsf)
             print('datagrids', file=xsf)
             print('DATAGRID_3D_DENSITY', file=xsf)
             print(f'{self.ngfftx+1} {self.ngffty+1} {self.ngfftz+1}', file=xsf)
             print('0.0 0.0 0.0', file=xsf)
-            print(f'{self.real_lattice[0,0]} {self.real_lattice[0,1]} {self.real_lattice[0,2]}', file=xsf)
-            print(f'{self.real_lattice[1,0]} {self.real_lattice[1,1]} {self.real_lattice[1,2]}', file=xsf)
-            print(f'{self.real_lattice[2,0]} {self.real_lattice[2,1]} {self.real_lattice[2,2]}', file=xsf)
+            print(f'{self.lattice[0,0]} {self.lattice[0,1]} {self.lattice[0,2]}', file=xsf)
+            print(f'{self.lattice[1,0]} {self.lattice[1,1]} {self.lattice[1,2]}', file=xsf)
+            print(f'{self.lattice[2,0]} {self.lattice[2,1]} {self.lattice[2,2]}', file=xsf)
             count = 0
             for z in range(self.ngfftz+1):
                 for x in range(self.ngfftx+1):
                     for y in range(self.ngffty+1):
                         count += 1
-                        if component:
-                            print(state[z][x][y].real, file=xsf, end=' ')
+                        if _component:
+                            print(self.wfk_coeffs[z,x,y].real, file=xsf, end=' ')
                         else:
-                            print(state[z][x][y].imag, file=xsf, end=' ')
+                            print(self.wfk_coeffs[z,x,y].imag, file=xsf, end=' ')
                         if count == 6:
                             count = 0
                             print('\n', file=xsf, end='')
             print('END_DATAGRID_3D', file=xsf)
             print('END_BLOCK_DATAGRID3D', file=xsf)
         # rerun method to write out imaginary part
-        if component:
+        if _component:
             xsf_file = xsf_file.split('_real')[0]
-            self.WriteXSF(xsf_file, state, component=False)
-    #-----------------------------------------------------------------------------------------------------------------#
-    # a wrapper around BandU and WriteXSF for calling both in one line
-    def MakeXSF(
-            self, xsf_name:str, energy_level:float=None, states:int=None, width:float=0.005
-    )->None:
-        '''
-        A wrapper around the BandU and WriteXSF methods for making XSF files in one line
-
-        Parameters
-        ----------
-        xsf_name : str
-            The name of the output XSF file
-        energy_level : float
-            This defines what energy level to look for states at, default is the Fermi energy
-        states : int
-            This defines how many grids are generated, default is all states found
-        width : float
-            This defines the upper and lower bounds on the energy_level, default is 0.005 Hartree
-        '''
-        for i, state in enumerate(self.BandU(energy_level=energy_level, states=states, width=width)):
-            print('Writing XSF')
-            self.WriteXSF(f'{xsf_name}_{i+1}', state)
-            print('XSF complete')
+            self.WriteXSF(xsf_file, _component=False)
