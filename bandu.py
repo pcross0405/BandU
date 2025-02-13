@@ -6,6 +6,28 @@ class BandU():
     def __init__(
         self, wfks:Generator, energy_level:float, width:float, grid:bool=True, fft:bool=True, norm:bool=True
     )->None:
+        '''
+        BandU object with methods for finding states and computing BandU functions from states.
+
+        Parameters
+        ----------
+        wfks : Generator
+            An iterable generator of WFK objects with wavefunction coefficients, k-points, and eigenvalue attributes.
+        energy_level : float
+            The energy level of interest relative to the Fermi energy.
+        width : float
+            Defines how far above and below the energy_level is searched for states.
+            Search is done width/2 above and below, so total states captured are within 'width' energy.
+        grid : bool
+            Determines whether or not wavefunction coefficients are converted to 3D numpy grid.
+            Default converts to grid (True).
+        fft : bool
+            Determines whether or not wavefunction coefficients are Fourier transformed to real space.
+            Default converts from reciprocal space to real space (True).
+        nomr : bool
+            Determines whether or not wavefunction coefficients are normalized.
+            Default normalizes coefficients (True)
+        '''
         # find all states within width
         self.bandu_fxns, total_states = self._FindStates(energy_level, width, wfks, grid, fft, norm)
         # find overlap of states and diagonalize
@@ -62,8 +84,9 @@ class BandU():
         # after FFT the wfk coefficients are reshaped from grid to vector for subsequent matrix operations
         u_vecs = np.array(u_vecs).reshape(total_states, self.ngfftx*self.ngffty*self.ngfftz)
         if total_states == 0:
-            raise ValueError(f'''Identified 0 states within provided width.
-            Action: Increase width or increase fineness of kpoint mesh.
+            raise ValueError(
+            f'''Identified 0 states within provided width.
+            Action: Increase width or increase fineness of k-point mesh.
             ''')
         return u_vecs, total_states
     #-----------------------------------------------------------------------------------------------------------------#
