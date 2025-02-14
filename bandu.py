@@ -24,13 +24,12 @@ class BandU():
         fft : bool
             Determines whether or not wavefunction coefficients are Fourier transformed to real space.
             Default converts from reciprocal space to real space (True).
-        nomr : bool
+        norm : bool
             Determines whether or not wavefunction coefficients are normalized.
             Default normalizes coefficients (True)
         '''
-        self.energy_level = energy_level
         # find all states within width
-        self.bandu_fxns, total_states = self._FindStates(energy_level, width, wfks, grid, fft, norm)
+        self.bandu_fxns, total_states, fermi_energy = self._FindStates(energy_level, width, wfks, grid, fft, norm)
         # find overlap of states and diagonalize
         principal_vals, principal_vecs = self._FindOverlap()
         # linear combination of states weighted by principal components
@@ -42,7 +41,7 @@ class BandU():
         # write output file
         with open('eigenvalues.out', 'w') as f:
             print(f'Width is {width}', file=f)
-            print(f'Calculated for states with energy {self.energy_level}', file=f)
+            print(f'Energy level: {energy_level+fermi_energy}, Fermi energy: {fermi_energy}', file=f)
             print(principal_vals, file=f)
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
@@ -50,7 +49,7 @@ class BandU():
     # method transforming reciprocal space wfks to real space
     def _FindStates(
         self, energy_level:float, width:float, wfks:Generator, grid:bool, fft:bool, norm:bool
-    )->tuple[np.ndarray, int]:
+    )->tuple[np.ndarray, int, float]:
         # total number of states found within width
         total_states = 0
         # list for capturing all wfk coeffs of states within width
@@ -67,7 +66,8 @@ class BandU():
             self.typat = state.typat[0]
             self.znucltypat = state.znucltypat
             self.xred = state.xred
-            self.energy_level += state.fermi_energy
+            fermi_energy = state.fermi_energy
+            energy_level += fermi_energy
             break
         # loop through every state
         for state in wfks:
@@ -97,7 +97,7 @@ class BandU():
             ''')
         # after FFT the wfk coefficients are reshaped from grid to vector for subsequent matrix operations
         u_vecs = np.array(u_vecs).reshape(total_states, self.ngfftx*self.ngffty*self.ngfftz)
-        return u_vecs, total_states
+        return u_vecs, total_states, fermi_energy
     #-----------------------------------------------------------------------------------------------------------------#
     # find overlap of states
     def _FindOverlap(
