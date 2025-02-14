@@ -66,8 +66,6 @@ class WFK():
         self.symrel=symrel
         self.nsym=nsym
         self.nkpt=nkpt
-        if nkpt == None and kpoints != None:
-            self.nkpt=len(kpoints)
         self.nbands=nbands
         self.ngfftx=ngfftx
         self.ngffty=ngffty
@@ -123,7 +121,7 @@ class WFK():
         # Fourier transform reciprocal grid to real space grid
         real_coeffs = fftn(self.wfk_coeffs, norm='ortho')
         new_WFK = copy(self)
-        new_WFK.wfk_coeffs = real_coeffs
+        new_WFK.wfk_coeffs = np.array(real_coeffs).reshape((self.ngfftz, self.ngfftx, self.ngffty))
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method transforming real space wfks to reciprocal space
@@ -147,8 +145,9 @@ class WFK():
         '''
         Returns copy of WFK object with normalized wavefunction coefficients such that <psi|psi> = 1.
         '''
+        coeffs = np.array(self.wfk_coeffs)
         # calculate normalization constant and apply to wfk
-        norm = np.dot(self.wfk_coeffs.flatten(), np.conj(self.wfk_coeffs).flatten())
+        norm = np.dot(coeffs.flatten(), np.conj(coeffs).flatten())
         norm = np.sqrt(norm)
         new_WFK = copy(self)
         new_WFK.wfk_coeffs /= norm

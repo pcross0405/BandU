@@ -28,6 +28,7 @@ class BandU():
             Determines whether or not wavefunction coefficients are normalized.
             Default normalizes coefficients (True)
         '''
+        self.energy_level = energy_level
         # find all states within width
         self.bandu_fxns, total_states = self._FindStates(energy_level, width, wfks, grid, fft, norm)
         # find overlap of states and diagonalize
@@ -36,13 +37,12 @@ class BandU():
         self.bandu_fxns = np.matmul(principal_vecs, self.bandu_fxns)
         # normalize bandu functions
         for i in range(total_states):
-            normal_coeffs = WFK(wfk_coeffs=self.bandu_fxns[i,:])
-            normal_coeffs.Normalize()
+            normal_coeffs = WFK(wfk_coeffs=self.bandu_fxns[i,:]).Normalize()
             self.bandu_fxns[i,:] = normal_coeffs.wfk_coeffs
         # write output file
         with open('eigenvalues.out', 'w') as f:
             print(f'Width is {width}', file=f)
-            print(f'Calculated for states with energy {energy_level}', file=f)
+            print(f'Calculated for states with energy {self.energy_level}', file=f)
             print(principal_vals, file=f)
     #-----------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
@@ -65,7 +65,7 @@ class BandU():
             self.typat = state.typat[0]
             self.znucltypat = state.znucltypat
             self.xred = state.xred
-            energy_level += state.fermi_energy
+            self.energy_level += state.fermi_energy
             break
         # loop through every state
         for state in wfks:
@@ -74,20 +74,27 @@ class BandU():
                 if energy_level - width/2 <= band <= energy_level + width/2:
                     total_states += 1
                     # convert state to real space and add to u_vec list
+                    coeffs = WFK(
+                        wfk_coeffs=np.array(state.wfk_coeffs[i]),
+                        kpoints=np.array(state.kpoints),
+                        ngfftx=self.ngfftx,
+                        ngffty=self.ngffty,
+                        ngfftz=self.ngfftz
+                    )
                     if grid:
-                        state = state.GridWFK(band_index=i)
+                        coeffs = coeffs.GridWFK()
                     if fft:
-                        state = state.FFT()
+                        coeffs = coeffs.FFT()
                     if norm:
-                        state = state.Normalize()
-                    u_vecs.append(state.wfk_coeffs)
-        # after FFT the wfk coefficients are reshaped from grid to vector for subsequent matrix operations
-        u_vecs = np.array(u_vecs).reshape(total_states, self.ngfftx*self.ngffty*self.ngfftz)
+                        coeffs = coeffs.Normalize()
+                    u_vecs.append(coeffs.wfk_coeffs)
         if total_states == 0:
             raise ValueError(
             f'''Identified 0 states within provided width.
             Action: Increase width or increase fineness of k-point mesh.
             ''')
+        # after FFT the wfk coefficients are reshaped from grid to vector for subsequent matrix operations
+        u_vecs = np.array(u_vecs).reshape(total_states, self.ngfftx*self.ngffty*self.ngfftz)
         return u_vecs, total_states
     #-----------------------------------------------------------------------------------------------------------------#
     # find overlap of states

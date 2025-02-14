@@ -239,7 +239,7 @@ class AbinitWFK():
                         cg2 = bytes2float(wfk.read(8))
                         cg.append(cg1 + 1j*cg2)
                     coeffs.append(cg)
-                    wfk.read(4)            
+                    wfk.read(4)       
                 yield WFK(
                             eigenvalues=eigenvalues, 
                             wfk_coeffs=coeffs,
