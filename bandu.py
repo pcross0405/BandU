@@ -44,7 +44,9 @@ class BandU():
             print(f'Width is {width}', file=f)
             print(f'Calculated for states with energy {self.energy_level}', file=f)
             print(principal_vals, file=f)
-    #-----------------------------------------------------------------------------------------------------------------#
+#---------------------------------------------------------------------------------------------------------------------#
+#------------------------------------------------------ METHODS ------------------------------------------------------#
+#---------------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
     def _FindStates(
         self, energy_level:float, width:float, wfks:Generator, grid:bool, fft:bool, norm:bool
