@@ -56,7 +56,7 @@ class WFK():
     '''
     def __init__(
         self, 
-        wfk_coeffs:np.ndarray, kpoints:np.ndarray=None, symrel:np.ndarray=None, nsym:int=None, nkpt:int=None, 
+        wfk_coeffs:np.ndarray=None, kpoints:np.ndarray=None, symrel:np.ndarray=None, nsym:int=None, nkpt:int=None, 
         nbands:int=None, ngfftx:int=None, ngffty:int=None, ngfftz:int=None, eigenvalues:list=None, 
         fermi_energy:float=None, lattice:np.ndarray=None, natom:int=None, xred:np.ndarray=None, typat:list=None,
         znucltypat:list=None
