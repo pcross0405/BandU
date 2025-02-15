@@ -294,6 +294,21 @@ class AbinitWFK():
                 wfk.read(nband_temp*8)
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
-                yield eigenvalues
+                yield WFK(
+                            eigenvalues=eigenvalues, 
+                            kpoints=self.kpts,
+                            nbands=self.bands[0],
+                            ngfftx=self.ngfftx,
+                            ngffty=self.ngffty,
+                            ngfftz=self.ngfftz,
+                            symrel=self.symrel,
+                            nsym=self.nsym,
+                            lattice=self.real_lattice,
+                            natom=self.natom,
+                            xred=self.xred,
+                            typat=self.typat,
+                            znucltypat=self.znucltypat,
+                            fermi_energy=self.fermi
+                )
         print('WFK body read')
         wfk.close()
