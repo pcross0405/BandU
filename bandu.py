@@ -56,21 +56,20 @@ class BandU():
         u_vecs = []
         # state will be a WFK type
         state:WFK
-        # find WFK type attributes, needed for writing XSF
-        for state in wfks:
-            self.ngfftx = state.ngfftx
-            self.ngffty = state.ngffty
-            self.ngfftz = state.ngfftz
-            self.lattice = state.lattice
-            self.natom = state.natom
-            self.typat = state.typat[0]
-            self.znucltypat = state.znucltypat
-            self.xred = state.xred
-            fermi_energy = state.fermi_energy
-            energy_level += fermi_energy
-            break
         # loop through every state
-        for state in wfks:
+        for i, state in enumerate(wfks):
+            # pick necessary attributes for XSF writing
+            if i == 0:
+                self.ngfftx = state.ngfftx
+                self.ngffty = state.ngffty
+                self.ngfftz = state.ngfftz
+                self.lattice = state.lattice
+                self.natom = state.natom
+                self.typat = state.typat[0]
+                self.znucltypat = state.znucltypat
+                self.xred = state.xred
+                fermi_energy = state.fermi_energy
+                energy_level += fermi_energy
             # check if state has a band that crosses the width
             for i, band in enumerate(state.eigenvalues):
                 if energy_level - width/2 <= band <= energy_level + width/2:
