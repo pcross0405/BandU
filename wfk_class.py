@@ -113,7 +113,7 @@ class WFK():
     # method transforming reciprocal space wfks to real space
     def FFT(
             self
-    )->None:
+    )->Self:
         '''
         Returns copy of WFK with wavefunction coefficients in expressed in real space.
         Assumes existing wavefunction coefficients are expressed in reciprocal space. 
