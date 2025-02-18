@@ -209,7 +209,7 @@ class AbinitWFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                kpoints = []
+                k_latt_pts = []
                 eigenvalues = []
                 occupancies = []
                 coeffs = []
@@ -222,7 +222,7 @@ class AbinitWFK():
                     kx = bytes2int(wfk.read(4))
                     ky = bytes2int(wfk.read(4))
                     kz = bytes2int(wfk.read(4))
-                    kpoints.append((kx, ky, kz))
+                    k_latt_pts.append((kx, ky, kz))
                 wfk.read(8)
                 for nband in range(nband_temp):
                     eigenval = bytes2float(wfk.read(8))
@@ -243,7 +243,9 @@ class AbinitWFK():
                 yield WFK(
                             eigenvalues=eigenvalues, 
                             wfk_coeffs=coeffs,
-                            kpoints=kpoints,
+                            rec_latt_pts=k_latt_pts,
+                            kpoints=self.kpts,
+                            nkpt=self.nkpt,
                             nbands=self.bands[0],
                             ngfftx=self.ngfftx,
                             ngffty=self.ngffty,
@@ -261,7 +263,7 @@ class AbinitWFK():
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
     # method to read only eigenvalues from body of wavefunction file
-    def _ReadEigenvalues(
+    def ReadEigenvalues(
         self
     )->Generator:
         wfk = open(self.filename, 'rb')
@@ -297,6 +299,7 @@ class AbinitWFK():
                 yield WFK(
                             eigenvalues=eigenvalues, 
                             kpoints=self.kpts,
+                            nkpt=self.nkpt,
                             nbands=self.bands[0],
                             ngfftx=self.ngfftx,
                             ngffty=self.ngffty,
