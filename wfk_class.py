@@ -53,16 +53,20 @@ class WFK():
     znucltypat : list
         List of element names
         First element of list should correspond to typat label 1, second element to label 2 and so on
+    rec_latt_pts : np.ndarray
+        Array of reciprocal lattice points.
+        Necessary for arranging wavefunction coefficients in 3D array.
     '''
     def __init__(
         self, 
         wfk_coeffs:np.ndarray=None, kpoints:np.ndarray=None, symrel:np.ndarray=None, nsym:int=None, nkpt:int=None, 
         nbands:int=None, ngfftx:int=None, ngffty:int=None, ngfftz:int=None, eigenvalues:list=None, 
         fermi_energy:float=None, lattice:np.ndarray=None, natom:int=None, xred:np.ndarray=None, typat:list=None,
-        znucltypat:list=None
+        znucltypat:list=None, rec_latt_pts:np.ndarray=None
     )->None:
         self.wfk_coeffs=wfk_coeffs
         self.kpoints=kpoints
+        self.rec_latt_pts=rec_latt_pts,
         self.symrel=symrel
         self.nsym=nsym
         self.nkpt=nkpt
@@ -98,7 +102,7 @@ class WFK():
         # initialize 3D grid
         gridded_wfk = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
         # update grid with wfk coefficients
-        for k, kpt in enumerate(self.kpoints):
+        for k, kpt in enumerate(self.rec_latt_pts):
             kx = kpt[0]
             ky = kpt[1]
             kz = kpt[2]
@@ -155,7 +159,7 @@ class WFK():
     #-----------------------------------------------------------------------------------------------------------------#
     # method for converting real space lattice vectors to reciprocal space vectors
     def Real2Reciprocal(
-            real_lat:np.ndarray
+        self
     )->np.ndarray:
         '''
         Method for converting the real space lattice parameters to reciprocal lattice parameters
@@ -166,9 +170,9 @@ class WFK():
             3x3 numpy array containing real space lattice parameters.
         '''
         # conversion by default converts Angstrom to Bohr since ABINIT uses Bohr
-        a = real_lat[0,:]
-        b = real_lat[1,:]
-        c = real_lat[2,:]
+        a = self.lattice[0,:]
+        b = self.lattice[1,:]
+        c = self.lattice[2,:]
         vol = np.dot(a,np.cross(b,c))
         b1 = 2*np.pi*(np.cross(b,c))/vol
         b2 = 2*np.pi*(np.cross(c,a))/vol
@@ -202,12 +206,7 @@ class WFK():
         # points overlap on at edges of each symmetric block, remove duplicates
         sym_pts, unique_inds = np.unique(sym_pts, return_index=True, axis=0)
         sym_vals = np.take(sym_vals, unique_inds, axis=0)
-        if points == None:
-            return sym_vals
-        elif values == None:
-            return sym_pts
-        else:
-            return sym_pts, sym_vals
+        return sym_pts, sym_vals
     #-----------------------------------------------------------------------------------------------------------------#
     # method for expanding a grid into XSF format
     def XSFFormat(
@@ -269,6 +268,10 @@ class WFK():
                     # remove the end points along each axis
                     if y == self.ngffty - 1 or x == self.ngfftx - 1 or z == self.ngfftz - 1:
                         to_be_del[z,x,y] = False
+        # remove xsf entries from array
+        grid = grid[to_be_del]
+        # restore grid shape
+        grid = grid.reshape((self.ngfftz-1, self.ngfftx-1, self.ngffty-1))
         new_WFK = copy(self)
         new_WFK.wfk_coeffs = grid
         return new_WFK
