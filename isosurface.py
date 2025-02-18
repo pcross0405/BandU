@@ -1,99 +1,145 @@
 from wfk_class import WFK
 from xsf_reader import XSF
+from typing import Generator
 import numpy as np
-from scipy.fft import fftn
+from copy import copy
 from scipy.spatial import Voronoi, ConvexHull, Delaunay
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter
 import pickle as pkl
 
-class Isosurface(WFK):
+class Isosurface():
     def __init__(
-            self, filename:str='', depth_peeling:bool=True, save:bool=True, save_file:str='Fermi_surface.pkl', 
-            empty_mesh:bool=False
+            self, wfks:Generator=None, depth_peeling:bool=True, save:bool=True, save_file:str='Fermi_surface.pkl',
+            empty_mesh:bool=False, energy_level:float=0.0, width:float=0.005
     )->None:
-        if filename != '':
-            super().__init__(filename)
+        '''
+        Class for creating energy isosurfaces with the PyVista library from WFK object.
+
+        Parameters
+        ----------
+        wfks : Generator
+            An iterable generator of WFK objects.
+        depth_peeling : bool
+            Enables parts of surface to remain invisible without effecting visible surface opacity.
+            Default enables depth peeling (True).
+        save : bool
+            Saves surface as pickle for rerendering later and post analysis.
+            Default saves pickle file (True).
+        save_file : str
+            Name of save file.
+            Default "Fermi_surface.pkl".
+        empty_mesh : bool
+            If no surface can be constructed, then proceed with plotting anyways.
+            Default is to throw exception if surface cannot be constructed (False).
+        energy_level : float
+            This determines what energy the isosurface is created at.
+            Set relative to the Fermi energy, default is 0.0. 
+        width : float
+            Determines how far above and below to look for states about an energy_level.
+            Looks width/2 above and below energy_level, default is 0.005 (Hartree is assumed).
+        '''
+        self.wfks = wfks
         self.p:pv.Plotter = BackgroundPlotter(window_size=(600,400))
         self.save = save
         self.save_file = save_file
-        if save_file != 'Fermi_surface.pkl':
-            self.save = True
         pv.global_theme.allow_empty_mesh = empty_mesh
         if depth_peeling:
             self.p.enable_depth_peeling(number_of_peels=10)
     #-----------------------------------------------------------------------------------------------------------------#
     # method for getting eigenvalues and kpoints within specified energy range
-    def _GetValAndKpt(
-            self, energy_level:float=None, width:float=0.0005
+    def Surface(
+            self, energy_level:float, width:float
     )->tuple[np.ndarray, np.ndarray, list]:
-        # default energy is fermi energy
-        if energy_level == None:
-            energy_level = self.fermi
-        else:
-            energy_level += self.fermi
-        # define upper and lower energy bounds
-        min_nrg = energy_level - width/2
-        max_nrg = energy_level + width/2
         # lists energy values to for making isosurface
-        iso_values = np.zeros((self.nkpt,self.bands[0]))
         band_num = []
-        for i, eigenvalues in enumerate(self._ReadEigenvalues()):
-            iso_values[i,:] = eigenvalues
-            for band, eigval in enumerate(eigenvalues):
+        # loop through generator of WFK objects
+        state:WFK
+        for i, state in enumerate(self.wfks):
+            # first loop collect necessary attributes from WFK object
+            if i == 0:
+                self.ngfftx = state.ngfftx
+                self.ngffty = state.ngffty
+                self.ngfftz = state.ngfftz
+                self.nbands = state.nbands
+                self.kpoints = state.kpoints
+                self.nkpt = state.nkpt
+                self.fermi_energy = state.fermi_energy
+                self.symrel = state.symrel
+                self.nsym = state.nsym
+                energy_level += self.fermi_energy
+                min_nrg = energy_level - width/2
+                max_nrg = energy_level + width/2
+                iso_values = np.zeros((self.nkpt,self.nbands))
+                self.lattice = state.lattice
+                self.rec_lattice = state.Real2Reciprocal()
+            # pick up eigenvalues
+            iso_values[i,:] = state.eigenvalues
+            # check if band crosses into energy width
+            for band, eigval in enumerate(iso_values[i,:]):
                 if min_nrg <= eigval <= max_nrg:
                     band_num.append(band)
                     # only 1 value per kpoint (if there is a value) move to next kpt when found
                     break
-        iso_pts = np.array(self.kpts).reshape((self.nkpt,3))
+        # collect kpoints and unique bands that cross into width
+        iso_pts = np.array(self.kpoints).reshape((self.nkpt,3))
         band_num = set(band_num)
         return iso_pts, iso_values, band_num
     #-----------------------------------------------------------------------------------------------------------------#
     # method for finding overlap value of BandU function with k-states
     def _FindOverlap(
-            self, coeffs:np.ndarray, wfk_grid:np.ndarray, BandU:np.ndarray
+            self, state:WFK, bandu_fxn:np.ndarray
     )->np.ndarray:
-        ngfft_grid = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
-        overlaps = []
-        for wfk in coeffs:
-            for i, points in enumerate(wfk_grid):
-                x = points[0]
-                y = points[1]
-                z = points[2]
-                ngfft_grid[z][x][y] = wfk[i]
-            ngfft_grid = fftn(ngfft_grid, norm='ortho')
-            overlap = np.sum(np.conj(BandU)*ngfft_grid)
-            overlaps.append(np.square(np.abs(overlap)))
-        return np.array(overlaps).real
+        overlap_vals = []
+        for i in range(state.nbands):
+            temp_state = copy(state)
+            temp_state = temp_state.GridWFK(band_index=i)
+            temp_state = temp_state.FFT()
+            overlap = np.sum(np.conj(bandu_fxn)*temp_state.wfk_coeffs)
+            overlap_vals.append(np.square(np.abs(overlap)))
+        return np.array(overlap_vals).real
     #-----------------------------------------------------------------------------------------------------------------#
     # method getting eigenvalues and kpts within defined energy range, also get overlap of BandU eigfuncs w/ states
-    def _GetOverlapValandKpt(
-            self, BandU:np.ndarray, energy_level:float=None, width:float=0.0005
+    def SurfaceAndColor(
+            self, bandu_fxn:np.ndarray, energy_level:float=None, width:float=0.0005
     )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
-        # default energy is fermi energy
-        if energy_level == None:
-            energy_level = self.fermi
-        else:
-            energy_level = self.fermi + energy_level
-        # define upper and lower energy bounds
-        min_nrg = energy_level - width/2
-        max_nrg = energy_level + width/2
-        # lists energy values to for making isosurface
-        iso_values = np.zeros((self.nkpt,self.bands[0]))
-        overlaps = np.zeros((self.nkpt,self.bands[0]))
+        # list for picking which bands cross energy width
         band_num = []
-        for i, (eigenvalues, coeffs, kpoints) in enumerate(self._ReadWFK()):
-            overlap_values = self._FindOverlap(coeffs, kpoints, BandU)
-            overlaps[i,:] = overlap_values
-            iso_values[i,:] = eigenvalues
-            for band, eigval in enumerate(eigenvalues):
+        # loop through generator of WFK objects
+        state:WFK
+        for i, state in enumerate(self.wfks):
+            # first loop collect necessary attributes from WFK object
+            if i == 0:
+                self.ngfftx = state.ngfftx
+                self.ngffty = state.ngffty
+                self.ngfftz = state.ngfftz
+                self.nbands = state.nbands
+                self.kpoints = state.kpoints
+                self.nkpt = state.nkpt
+                self.symrel = state.symrel
+                self.nsym = state.nsym
+                self.fermi_energy = state.fermi_energy
+                energy_level += self.fermi_energy
+                self.lattice = state.lattice
+                self.rec_lattice = state.Real2Reciprocal()
+                min_nrg = energy_level - width/2
+                max_nrg = energy_level + width/2
+                iso_values = np.zeros((self.nkpt, self.nbands))
+                overlap_vals = np.zeros((self.nkpt, self.nbands))
+            # pick up eigenvalues
+            iso_values[i,:] = state.eigenvalues
+            # compute overlap of eigenstates with BandU function
+            overlap_vals[i,:] = self._FindOverlap(state, bandu_fxn)
+            # check if band crosses into energy width
+            for band, eigval in enumerate(iso_values[i,:]):
                 if min_nrg <= eigval <= max_nrg:
                     band_num.append(band)
                     # only 1 value per kpoint (if there is a value) move to next kpt when found
                     break
-        iso_pts = np.array(self.kpts).reshape((self.nkpt,3))
+        # collect kpoints and unique bands that cross into width
+        iso_pts = np.array(self.kpoints).reshape((self.nkpt,3))
         band_num = set(band_num)
-        return iso_pts, iso_values, band_num, overlaps
+        return iso_pts, iso_values, band_num, overlap_vals
     #-----------------------------------------------------------------------------------------------------------------#
     # method constructing PyVista grid
     def MakeGrid(
@@ -174,35 +220,6 @@ class Isosurface(WFK):
             trans_values[(even_ind+8)*npts:(even_ind+9)*npts,:] = values
         return trans_points, trans_values
     #-----------------------------------------------------------------------------------------------------------------#
-    # method for creating symmetrically equivalent points
-    def SymPtsAndVals(
-            self, points:np.ndarray, values:np.ndarray
-    )->tuple[np.ndarray, np.ndarray]:
-        '''
-        Method for generating full reciprocal space cell from irreducible kpoints\n
-        *REQUIRES KPOINTS TO BE IN REDUCED FORMAT, CARTESIAN FORMAT WILL NOT WORK*
-
-        Parameters
-        ----------
-        points : np.ndarray
-            Irreducible set of kpoints, generally from GetValAndKpt
-        values : np.ndarray
-            Eigenvalues for irreducible kpoints, generally from GetValAndKpt
-        '''
-        # get symmetry operations and initialize symmetrically equivalent point and value arrays
-        sym_ops = self.symrel
-        ind_len = self.nkpt
-        sym_pts = np.zeros((self.nsym*ind_len,3))
-        sym_vals = np.zeros((self.nsym*ind_len,self.bands[0]))
-        for i, op in enumerate(sym_ops):
-            new_pts = np.matmul(points, op)
-            sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
-            sym_vals[i*ind_len:(i+1)*ind_len,:] = values
-        # points overlap on at edges of each symmetric block, remove duplicates
-        sym_pts, unique_inds = np.unique(sym_pts, return_index=True, axis=0)
-        sym_vals = np.take(sym_vals, unique_inds, axis=0)
-        return sym_pts, sym_vals
-    #-----------------------------------------------------------------------------------------------------------------#
     # method for interpolating grid with Scipy Interpolation
     def _ScipyInterpolate(
             self, grid_points:np.ndarray, interp_points:np.ndarray, values:np.ndarray, null_value:float
@@ -282,7 +299,7 @@ class Isosurface(WFK):
         trans_pts = pv.PolyData(trans_pts)
         trans_pts['values'] = trans_vals
         if null_value == None:
-                null_value = self.fermi+energy_level+width/2*1.05
+            null_value = self.fermi_energy+energy_level+width/2*1.05
         if scipy_interpolation:
             grid['values'] = self._ScipyInterpolate(
                 grid.points, 
@@ -300,9 +317,9 @@ class Isosurface(WFK):
             )
         # create isosurface
         if rng == None:
-            rng = [self.fermi, self.fermi]
+            rng = [self.fermi_energy, self.fermi_energy]
         else:
-            rng = [self.fermi + rng[0], self.fermi + rng[1]]
+            rng = [self.fermi_energy + rng[0], self.fermi_energy + rng[1]]
         iso_surf:pv.PolyData = grid.contour(isosurfaces=isosurfaces, rng=rng, method='contour')
         opacities = self._SetOpacity(iso_surf.points, hull, delaunay)
         # apply Taubin smoothing
@@ -319,6 +336,7 @@ class Isosurface(WFK):
                 sharpness,
                 strategy
             )
+            scalars += 10**(-15)
         if self.save:
             with open(self.save_file, 'ab') as f:
                 pkl.dump(iso_surf, f)
@@ -359,20 +377,24 @@ class Isosurface(WFK):
     )->tuple[np.ndarray, np.ndarray, list, np.ndarray]:
         # function only used by _BandUColor for reading in all BandU XSF files necessary
         def _ReadXSFs()->np.ndarray:
-            real_func = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
-            imag_func = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
             for num in xsf_nums:
                 real_path = xsf_root + f'_bandu_{num}_real.xsf'
                 real_xsf = XSF(real_path)
-                real_func += real_xsf.ReadDensity()
+                real_func = real_xsf.ReadDensity()
                 imag_path = xsf_root + f'_bandu_{num}_imag.xsf'
                 imag_xsf = XSF(imag_path)
-                imag_func += 1j*imag_xsf.ReadDensity()
+                imag_func = 1j*imag_xsf.ReadDensity()
             eigfunc = real_func + imag_func
             return eigfunc
         # read in BandU eigenfunction from XSF file
         if xsf_root != None:
             BandU_func = _ReadXSFs()
+            BandU_func = WFK(
+                wfk_coeffs=BandU_func,
+                ngfftx=np.shape(BandU_func)[1],
+                ngffty=np.shape(BandU_func)[2],
+                ngfftz=np.shape(BandU_func)[0]
+            ).RemoveXSF()
         # or calculate eigenfunction from WFK
         else:
             raise NotImplementedError(
@@ -388,9 +410,10 @@ class Isosurface(WFK):
                 print(f'There are only {states} BandU functions, setting BandU parameter to {states}')
             states -= 1
             BandU_func = eigfuncs[states]
-        kpts, eigvals, bands, overlaps = self._GetOverlapValandKpt(energy_level=energy_level, 
-                                                                    width=width, 
-                                                                    BandU=BandU_func
+        kpts, eigvals, bands, overlaps = self.SurfaceAndColor(
+            energy_level=energy_level, 
+            width=width, 
+            bandu_fxn=BandU_func.wfk_coeffs
         )
         return kpts, eigvals, bands, overlaps
     #-----------------------------------------------------------------------------------------------------------------#
@@ -461,7 +484,7 @@ class Isosurface(WFK):
             self, show_energy:bool=False
     )->None:
         if show_energy:
-            self.p.add_text(f'Fermi Energy:{self.fermi} H', font_size=12)
+            self.p.add_text(f'Fermi Energy:{self.fermi_energy} H', font_size=12)
         self.p.enable_parallel_projection()
         self.p.enable_custom_trackball_style(left='rotate',
                                              shift_left='spin',
@@ -488,19 +511,24 @@ class Isosurface(WFK):
         if read_xsf:
             if bandu_width == None:
                 bandu_width = width
-            kpts, eigvals, bands, overlaps = self._BandUColor(energy_level, 
-                                                              bandu_width, 
-                                                              BandU, 
-                                                              xsf_root=xsf_root,
-                                                              xsf_nums=xsf_nums
+            kpts, eigvals, bands, overlaps = self._BandUColor(
+                energy_level, 
+                bandu_width, 
+                BandU, 
+                xsf_root=xsf_root,
+                xsf_nums=xsf_nums
             )
-            _, overlaps = self.SymPtsAndVals(kpts, overlaps)
+            temp = WFK(kpoints=kpts, eigenvalues=overlaps, symrel=self.symrel, nsym=self.nsym, nkpt=self.nkpt, 
+                       nbands=self.nbands)
+            _, overlaps = temp.Symmetrize(temp.kpoints, temp.eigenvalues)
         # if BandU is not specified, just recover kpts, eigenvals, and bands
         # this will construct the isosurface with monochromatic coloration
         else:
-            kpts, eigvals, bands = self._GetValAndKpt(energy_level=energy_level, width=width)
+            kpts, eigvals, bands = self.Surface(energy_level=energy_level, width=width)
         # apply symmetry operations to kpoints
-        kpts, eigvals = self.SymPtsAndVals(kpts, eigvals)
+        temp = WFK(kpoints=kpts, eigenvalues=eigvals, symrel=self.symrel, nsym=self.nsym, nkpt=self.nkpt, 
+                   nbands=self.nbands)
+        kpts, eigvals = temp.Symmetrize(temp.kpoints, temp.eigenvalues)
         # convert reduce coordinates to Cartesian coordinates
         kpts = np.matmul(kpts, self.rec_lattice)
         # get Brillouin zone and add it to plotter
