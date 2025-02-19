@@ -77,7 +77,7 @@ class BandU():
                     # convert state to real space and add to u_vec list
                     coeffs = WFK(
                         wfk_coeffs=np.array(state.wfk_coeffs[i]),
-                        kpoints=np.array(state.kpoints),
+                        pw_indices=np.array(state.pw_indices),
                         ngfftx=self.ngfftx,
                         ngffty=self.ngffty,
                         ngfftz=self.ngfftz
@@ -119,7 +119,7 @@ class BandU():
         self, function_number:list, xsf_file:str
     )->None:
         if len(function_number) != 2:
-            raise ValueError(f'function_number should contain two variables, {len(function_number)} were received.')
+            raise ValueError(f'function_number should contain two values, {len(function_number)} were received.')
         count = 1
         while function_number[0] <= count <= function_number[1]:
             # fetch nth bandu function coefficients
