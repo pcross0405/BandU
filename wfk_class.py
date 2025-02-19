@@ -19,6 +19,10 @@ class WFK():
         Entries along axis 0 should be individual kpoints
         Entries along axis 1 should be the kx, ky, and kz components, in that order
         The kpoints should be in reduced form
+    pw_indices : np.ndarray
+        Array of H, K, L indices for the planwave basis set.
+        Arrays of (1,3) [H,K,L] should fill axis 0, and H, K, L values fill axis 1 in that order.
+        Necessary for arranging wavefunction coefficients in 3D array.
     syrmel : np.ndarray
         A multidimensional array of 3x3 arrays of symmetry operations
     nsym : int
@@ -53,20 +57,17 @@ class WFK():
     znucltypat : list
         List of element names
         First element of list should correspond to typat label 1, second element to label 2 and so on
-    rec_latt_pts : np.ndarray
-        Array of reciprocal lattice points.
-        Necessary for arranging wavefunction coefficients in 3D array.
     '''
     def __init__(
         self, 
         wfk_coeffs:np.ndarray=None, kpoints:np.ndarray=None, symrel:np.ndarray=None, nsym:int=None, nkpt:int=None, 
         nbands:int=None, ngfftx:int=None, ngffty:int=None, ngfftz:int=None, eigenvalues:list=None, 
         fermi_energy:float=None, lattice:np.ndarray=None, natom:int=None, xred:np.ndarray=None, typat:list=None,
-        znucltypat:list=None, rec_latt_pts:np.ndarray=None
+        znucltypat:list=None, pw_indices:np.ndarray=None
     )->None:
         self.wfk_coeffs=wfk_coeffs
         self.kpoints=kpoints
-        self.rec_latt_pts=rec_latt_pts,
+        self.pw_indices=pw_indices
         self.symrel=symrel
         self.nsym=nsym
         self.nkpt=nkpt
@@ -79,7 +80,7 @@ class WFK():
         self.lattice=lattice
         self.natom=natom
         self.xred=xred
-        self.typat=typat,
+        self.typat=typat
         self.znucltypat=znucltypat
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
@@ -102,7 +103,7 @@ class WFK():
         # initialize 3D grid
         gridded_wfk = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
         # update grid with wfk coefficients
-        for k, kpt in enumerate(self.rec_latt_pts):
+        for k, kpt in enumerate(self.pw_indices):
             kx = kpt[0]
             ky = kpt[1]
             kz = kpt[2]
@@ -288,9 +289,6 @@ class WFK():
         xsf_file : str
             The file name
         '''
-        # check if typat is packed as tuple or not
-        if type(self.typat) == tuple:
-            self.typat = self.typat[0]
         # first run writes out real part of eigenfunction to xsf
         if _component:
             xsf_file += '_real.xsf'
