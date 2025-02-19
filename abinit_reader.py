@@ -1,6 +1,6 @@
 import struct
 import numpy as np
-from typing import Generator
+from typing import Generator, Union
 import sys
 from wfk_class import WFK
 np.set_printoptions(threshold=sys.maxsize)
@@ -10,38 +10,6 @@ def bytes2float(bin_data):
 
 def bytes2int(bin_data):
     return int.from_bytes(bin_data, 'little', signed=True)
-
-class AbinitWFK():
-    '''
-    A class for storing all variables from ABINIT WFK file and generating WFK objects.
-    '''
-    def __init__(
-        self, filename:str
-    ):
-        self.filename = filename
-        self._ReadVersion()
-#---------------------------------------------------------------------------------------------------------------------#
-#------------------------------------------------------ METHODS ------------------------------------------------------#
-#---------------------------------------------------------------------------------------------------------------------#
-    # method to read version
-    def _ReadVersion(
-        self
-    )->None:
-        wfk = open(self.filename, 'rb')
-        self.header = bytes2int(wfk.read(4))
-        self.version = wfk.read(6).decode()
-        wfk.close()
-        if self.version.strip().split('.')[0] == '7':
-            return Abinit7WFK(self.filename)
-        elif self.version.strip().split('.')[0] == '10':
-            return Abinit10WFK(self.filename)
-        else:
-            print(f'Version {self.version} may not be supported, attempting to analyze with v10 procedure.')
-            return Abinit10WFK(self.filename)
-
-#---------------------------------------------------------------------------------------------------------------------#
-#----------------------------------------------------- END CLASS -----------------------------------------------------#
-#---------------------------------------------------------------------------------------------------------------------#
 
 class Abinit7WFK():
     def __init__(
@@ -83,6 +51,12 @@ class Abinit7WFK():
         self.occopt = bytes2int(wfk.read(4))
         self.pertcase = bytes2int(wfk.read(4))
         self.usepaw = bytes2int(wfk.read(4))
+        if self.usepaw == 1:
+            raise NotImplementedError(
+                f'''PAW potentials are not supported by this program for Abinit v{self.version}.
+                This program supports PAW potentials in Abinit v10, consider upgrading to the latest version.
+                '''
+            )
         #--------------#
         # unpack doubles
         self.ecut = bytes2float(wfk.read(8))
@@ -116,9 +90,7 @@ class Abinit7WFK():
         self.istwfk = []
         for i in range(self.nkpt):
             val = bytes2int(wfk.read(4))
-            self.istwfk.append(val)
-            if val > 1:
-                print(f'WARNING: istwfk value {i} is greater than 1, considering rerunning ABINIT with kptopt 3')       
+            self.istwfk.append(val)    
         self.bands = []
         for i in range(self.nkpt*self.nsppol):
             val = bytes2int(wfk.read(4))
@@ -236,7 +208,7 @@ class Abinit7WFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                k_latt_pts = []
+                pw_indices = []
                 eigenvalues = []
                 occupancies = []
                 coeffs = []
@@ -249,7 +221,7 @@ class Abinit7WFK():
                     kx = bytes2int(wfk.read(4))
                     ky = bytes2int(wfk.read(4))
                     kz = bytes2int(wfk.read(4))
-                    k_latt_pts.append((kx, ky, kz))
+                    pw_indices.append((kx, ky, kz))
                 wfk.read(8)
                 for nband in range(nband_temp):
                     eigenval = bytes2float(wfk.read(8))
@@ -268,23 +240,23 @@ class Abinit7WFK():
                     coeffs.append(cg)
                     wfk.read(4)       
                 yield WFK(
-                            eigenvalues=eigenvalues, 
-                            wfk_coeffs=coeffs,
-                            rec_latt_pts=k_latt_pts,
-                            kpoints=self.kpts,
-                            nkpt=self.nkpt,
-                            nbands=self.bands[0],
-                            ngfftx=self.ngfftx,
-                            ngffty=self.ngffty,
-                            ngfftz=self.ngfftz,
-                            symrel=self.symrel,
-                            nsym=self.nsym,
-                            lattice=self.real_lattice,
-                            natom=self.natom,
-                            xred=self.xred,
-                            typat=self.typat,
-                            znucltypat=self.znucltypat,
-                            fermi_energy=self.fermi
+                    eigenvalues=eigenvalues, 
+                    wfk_coeffs=coeffs,
+                    pw_indices=pw_indices,
+                    kpoints=self.kpts,
+                    nkpt=self.nkpt,
+                    nbands=self.bands[0],
+                    ngfftx=self.ngfftx,
+                    ngffty=self.ngffty,
+                    ngfftz=self.ngfftz,
+                    symrel=self.symrel,
+                    nsym=self.nsym,
+                    lattice=self.real_lattice,
+                    natom=self.natom,
+                    xred=self.xred,
+                    typat=self.typat,
+                    znucltypat=self.znucltypat,
+                    fermi_energy=self.fermi
                 )
         print('WFK body read')
         wfk.close()
@@ -327,21 +299,21 @@ class Abinit7WFK():
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
                 yield WFK(
-                            eigenvalues=eigenvalues, 
-                            kpoints=self.kpts,
-                            nkpt=self.nkpt,
-                            nbands=self.bands[0],
-                            ngfftx=self.ngfftx,
-                            ngffty=self.ngffty,
-                            ngfftz=self.ngfftz,
-                            symrel=self.symrel,
-                            nsym=self.nsym,
-                            lattice=self.real_lattice,
-                            natom=self.natom,
-                            xred=self.xred,
-                            typat=self.typat,
-                            znucltypat=self.znucltypat,
-                            fermi_energy=self.fermi
+                    eigenvalues=eigenvalues, 
+                    kpoints=self.kpts,
+                    nkpt=self.nkpt,
+                    nbands=self.bands[0],
+                    ngfftx=self.ngfftx,
+                    ngffty=self.ngffty,
+                    ngfftz=self.ngfftz,
+                    symrel=self.symrel,
+                    nsym=self.nsym,
+                    lattice=self.real_lattice,
+                    natom=self.natom,
+                    xred=self.xred,
+                    typat=self.typat,
+                    znucltypat=self.znucltypat,
+                    fermi_energy=self.fermi
                 )
         print('WFK body read')
         wfk.close()
@@ -583,18 +555,18 @@ class Abinit10WFK():
                     nrhoij = bytes2int(wfk.read(4))
                     self.nrho.append(nrhoij)
             self.cplex = bytes2int(wfk.read(4))
-            self.nspden = bytes2int(wfk.read(4))
+            self.nspden_paw = bytes2int(wfk.read(4))
             wfk.read(8)
             self.irho = []
             for i in range(self.natom):
-                for _ in range(self.nspden):
+                for _ in range(self.nspden_paw):
                     nrhoij = self.nrho[i]
                     for _ in range(nrhoij):
                         rhoij = bytes2int(wfk.read(4))
                         self.irho.append(rhoij)
             self.rho=[]
             for i in range(self.natom):
-                    for _ in range(self.nspden):
+                    for _ in range(self.nspden_paw):
                         nrhoij = self.nrho[i]
                         for _ in range(nrhoij):
                             rhoij = bytes2float(wfk.read(8))
@@ -613,10 +585,15 @@ class Abinit10WFK():
         wfk = open(self.filename, 'rb')
         #-----------#
         # skip header
-        wfk.read(298)
+        wfk.read(468)
         wfk.read(4*(2*self.nkpt + self.nkpt*self.nsppol + self.npsp + 10*self.nsym + self.natom))
-        wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + self.ntypat + 3*self.natom))
-        wfk.read(self.npsp*(176))
+        wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + 2*self.ntypat + 3*self.natom))
+        wfk.read(self.npsp*(208))
+        if self.usepaw == 1:
+            wfk.read(24)
+            wfk.read(4*self.natom*self.nspden)
+            for i in self.nrho:
+                wfk.read(12*self.natom*self.nspden_paw*i)
         #-------------------------------#
         # begin reading wavefunction body
         for i in range(self.nsppol):
@@ -624,7 +601,7 @@ class Abinit10WFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                k_latt_pts = []
+                pw_indices = []
                 eigenvalues = []
                 occupancies = []
                 coeffs = []
@@ -637,7 +614,7 @@ class Abinit10WFK():
                     kx = bytes2int(wfk.read(4))
                     ky = bytes2int(wfk.read(4))
                     kz = bytes2int(wfk.read(4))
-                    k_latt_pts.append((kx, ky, kz))
+                    pw_indices.append((kx, ky, kz))
                 wfk.read(8)
                 for nband in range(nband_temp):
                     eigenval = bytes2float(wfk.read(8))
@@ -654,25 +631,25 @@ class Abinit10WFK():
                         cg2 = bytes2float(wfk.read(8))
                         cg.append(cg1 + 1j*cg2)
                     coeffs.append(cg)
-                    wfk.read(4)       
+                    wfk.read(4) 
                 yield WFK(
-                            eigenvalues=eigenvalues, 
-                            wfk_coeffs=coeffs,
-                            rec_latt_pts=k_latt_pts,
-                            kpoints=self.kpts,
-                            nkpt=self.nkpt,
-                            nbands=self.bands[0],
-                            ngfftx=self.ngfftx,
-                            ngffty=self.ngffty,
-                            ngfftz=self.ngfftz,
-                            symrel=self.symrel,
-                            nsym=self.nsym,
-                            lattice=self.real_lattice,
-                            natom=self.natom,
-                            xred=self.xred,
-                            typat=self.typat,
-                            znucltypat=self.znucltypat,
-                            fermi_energy=self.fermi
+                    eigenvalues=eigenvalues, 
+                    wfk_coeffs=coeffs,
+                    pw_indices=pw_indices,
+                    kpoints=self.kpts,
+                    nkpt=self.nkpt,
+                    nbands=self.bands[0],
+                    ngfftx=self.ngfftx,
+                    ngffty=self.ngffty,
+                    ngfftz=self.ngfftz,
+                    symrel=self.symrel,
+                    nsym=self.nsym,
+                    lattice=self.real_lattice,
+                    natom=self.natom,
+                    xred=self.xred,
+                    typat=self.typat,
+                    znucltypat=self.znucltypat,
+                    fermi_energy=self.fermi
                 )
         print('WFK body read')
         wfk.close()
@@ -687,10 +664,15 @@ class Abinit10WFK():
         wfk = open(self.filename, 'rb')
         #-----------#
         # skip header
-        wfk.read(298)
+        wfk.read(468)
         wfk.read(4*(2*self.nkpt + self.nkpt*self.nsppol + self.npsp + 10*self.nsym + self.natom))
-        wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + self.ntypat + 3*self.natom))
-        wfk.read(self.npsp*(176))
+        wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + 2*self.ntypat + 3*self.natom))
+        wfk.read(self.npsp*(208))
+        if self.usepaw == 1:
+            wfk.read(24)
+            wfk.read(4*self.natom*self.nspden)
+            for i in self.nrho:
+                wfk.read(12*self.natom*self.nspden_paw*i)
         #-------------------------------#
         # begin reading wavefunction body
         for i in range(self.nsppol):
@@ -715,21 +697,43 @@ class Abinit10WFK():
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
                 yield WFK(
-                            eigenvalues=eigenvalues, 
-                            kpoints=self.kpts,
-                            nkpt=self.nkpt,
-                            nbands=self.bands[0],
-                            ngfftx=self.ngfftx,
-                            ngffty=self.ngffty,
-                            ngfftz=self.ngfftz,
-                            symrel=self.symrel,
-                            nsym=self.nsym,
-                            lattice=self.real_lattice,
-                            natom=self.natom,
-                            xred=self.xred,
-                            typat=self.typat,
-                            znucltypat=self.znucltypat,
-                            fermi_energy=self.fermi
+                    eigenvalues=eigenvalues, 
+                    kpoints=self.kpts,
+                    nkpt=self.nkpt,
+                    nbands=self.bands[0],
+                    ngfftx=self.ngfftx,
+                    ngffty=self.ngffty,
+                    ngfftz=self.ngfftz,
+                    symrel=self.symrel,
+                    nsym=self.nsym,
+                    lattice=self.real_lattice,
+                    natom=self.natom,
+                    xred=self.xred,
+                    typat=self.typat,
+                    znucltypat=self.znucltypat,
+                    fermi_energy=self.fermi
                 )
         print('WFK body read')
         wfk.close()
+
+#---------------------------------------------------------------------------------------------------------------------#
+#----------------------------------------------------- END CLASS -----------------------------------------------------#
+#---------------------------------------------------------------------------------------------------------------------#
+
+def AbinitWFK(
+    filename:str
+)->Union[Abinit10WFK, Abinit7WFK]:
+    '''
+    A function for identifying ABINIT version and constructing respective AbinitWFK object.
+    '''
+    wfk = open(filename, 'rb')
+    wfk.read(4)
+    version = wfk.read(6).decode()
+    wfk.close()
+    if version.strip().split('.')[0] == '7':
+        return Abinit7WFK(filename)
+    elif version.strip().split('.')[0] == '10':
+        return Abinit10WFK(filename)
+    else:
+        print(f'Version {version} may not be supported, attempting to analyze with v10 procedure.')
+        return Abinit10WFK(filename)
