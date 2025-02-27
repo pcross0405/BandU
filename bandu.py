@@ -65,7 +65,7 @@ class BandU():
                 self.ngfftz = state.ngfftz
                 self.lattice = state.lattice
                 self.natom = state.natom
-                self.typat = state.typat[0]
+                self.typat = state.typat
                 self.znucltypat = state.znucltypat
                 self.xred = state.xred
                 fermi_energy = state.fermi_energy
