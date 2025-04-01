@@ -61,26 +61,34 @@ class AnalyzeSurface(Isosurface):
             linear:bool=False, two_dim:bool=False
     )->np.ndarray:
         from scipy.spatial import Delaunay
+        # cross section is defined by plane of two perpendicular vectors
         if len(vecs) == 2:
             vec1 = np.matmul(vecs[0], rec_lattice)
             vec2 = np.matmul(vecs[1], rec_lattice)
             norm = np.cross(vec1, vec2)
             norm /= np.linalg.norm(norm)
+        # cross section is defined by normal vector
         else:
             vec = np.matmul(vecs, rec_lattice)
             norm = vec/np.linalg.norm(vec)
+        # surface points can be thought of vectors in 3D space, here we normalize the vectors
         norm_points = np.array(points/np.linalg.norm(points, axis=1).reshape((len(points),1)))
+        # find dot product between vector normal to cross section and all normalized points
         angs = np.matmul(norm, norm_points.T)
+        # opacity linearly fades out as points get farther from cross section
         if linear:
             angs[angs <= width] = 2
             angs -= 1
             angs = np.abs(angs)
+        # opacity is zero beyond width of cross section
         else:
+            # opacity is zero beyond width on both sides of cross section
             if two_dim:
                 angs = np.abs(angs)
             opacities = np.zeros(len(points))
             opacities[angs <= width] = 1
             angs = opacities  
+        # set opacity to zero for points outside of the BZ
         beyond_bz = Delaunay(bz_points).find_simplex(points)
         angs[beyond_bz < 0] = 0
         return angs
@@ -194,7 +202,8 @@ class AnalyzeSurface(Isosurface):
                 iso_surf:pv.PolyData = pkl.load(f)
                 opacities:np.ndarray = pkl.load(f)
                 scalars:np.ndarray = pkl.load(f)
-                scalars += 10**(-15)
+                if type(scalars) == np.ndarray:
+                    scalars += 10**(-15)
                 all_scalars = np.append(all_scalars, scalars)
                 all_points = np.append(all_points, iso_surf.points, axis=0)
                 if cross_section != []:
