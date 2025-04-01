@@ -33,7 +33,7 @@ class XSF():
                 self.coords = np.zeros((self.natoms, 3))
                 self.elements = []
                 for atom in range(self.natoms):
-                    coord = self.xsf_lines[i+atom+1].strip().split(' ')
+                    coord = self.xsf_lines[i+atom+2].strip().split(' ')
                     coord = [float(val) for val in coord]
                     element = atom_labels[int(coord[0])]
                     self.elements.append(element)
