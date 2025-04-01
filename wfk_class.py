@@ -250,6 +250,9 @@ class WFK():
                         grid_wfk[z][x][y] = grid_wfk[0][0][0]
         new_WFK = copy(self)
         new_WFK.wfk_coeffs = grid_wfk
+        new_WFK.ngfftx += 1
+        new_WFK.ngffty += 1
+        new_WFK.ngfftz += 1
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method removing XSF formatting from density grid
@@ -275,6 +278,9 @@ class WFK():
         grid = grid.reshape((self.ngfftz-1, self.ngfftx-1, self.ngffty-1))
         new_WFK = copy(self)
         new_WFK.wfk_coeffs = grid
+        new_WFK.ngfftx -= 1
+        new_WFK.ngffty -= 1
+        new_WFK.ngfftz -= 1
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method for writing wavefunctions to XSF file
@@ -316,15 +322,15 @@ class WFK():
             print('BEGIN_BLOCK_DATAGRID3D', file=xsf)
             print('datagrids', file=xsf)
             print('DATAGRID_3D_DENSITY', file=xsf)
-            print(f'{self.ngfftx+1} {self.ngffty+1} {self.ngfftz+1}', file=xsf)
+            print(f'{self.ngfftx} {self.ngffty} {self.ngfftz}', file=xsf)
             print('0.0 0.0 0.0', file=xsf)
             print(f'{self.lattice[0,0]} {self.lattice[0,1]} {self.lattice[0,2]}', file=xsf)
             print(f'{self.lattice[1,0]} {self.lattice[1,1]} {self.lattice[1,2]}', file=xsf)
             print(f'{self.lattice[2,0]} {self.lattice[2,1]} {self.lattice[2,2]}', file=xsf)
             count = 0
-            for z in range(self.ngfftz+1):
-                for x in range(self.ngfftx+1):
-                    for y in range(self.ngffty+1):
+            for z in range(self.ngfftz):
+                for x in range(self.ngfftx):
+                    for y in range(self.ngffty):
                         count += 1
                         if _component:
                             print(self.wfk_coeffs[z,x,y].real, file=xsf, end=' ')
