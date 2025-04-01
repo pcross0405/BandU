@@ -120,10 +120,14 @@ class BandU():
     )->None:
         if len(function_number) != 2:
             raise ValueError(f'function_number should contain two values, {len(function_number)} were received.')
-        count = 1
-        while function_number[0] <= count <= function_number[1]:
+        if function_number[0] < 1 or function_number[1] > self.bandu_fxns.shape[0]:
+            raise ValueError(
+                f'function_number range should be no lower than 1 and no greater than {self.bandu_fxns.shape[0]}'
+            )
+        count = function_number[0]
+        while count <= function_number[1]:
             # fetch nth bandu function coefficients
-            bandu_fxn = self.bandu_fxns[count-1,:]
+            bandu_fxn = self.bandu_fxns[function_number[0]+count-2,:]
             # grid coefficients into 3D numpy array
             bandu_fxn = bandu_fxn.reshape((self.ngfftz, self.ngfftx, self.ngffty))
             # create WFK object from coefficients and provided attributes
@@ -138,10 +142,12 @@ class BandU():
                 ngffty=self.ngffty,
                 ngfftz=self.ngfftz
             )
+            # normalize
+            bandu_fxn = bandu_fxn.Normalize()
             # convert to XSF format
             bandu_fxn = bandu_fxn.XSFFormat()
             # print out XSF file
-            xsf_name = xsf_file + f'_{count}'
+            xsf_name = xsf_file + f'_{function_number[0]+count-1}'
             bandu_fxn.WriteXSF(xsf_file=xsf_name)
             # update count and move to next bandu function
             count += 1
