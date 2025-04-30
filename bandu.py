@@ -31,7 +31,7 @@ class BandU():
         # find all states within width
         self.bandu_fxns, total_states, fermi_energy = self._FindStates(energy_level, width, wfks, grid, fft, norm)
         # find overlap of states and diagonalize
-        principal_vals, principal_vecs = self._FindOverlap()
+        principal_vals, principal_vecs = self._PrincipalComponents()
         # linear combination of states weighted by principal components
         self.bandu_fxns = np.matmul(principal_vecs, self.bandu_fxns)
         # normalize bandu functions
@@ -98,8 +98,8 @@ class BandU():
         u_vecs = np.array(u_vecs).reshape(total_states, self.ngfftx*self.ngffty*self.ngfftz)
         return u_vecs, total_states, fermi_energy
     #-----------------------------------------------------------------------------------------------------------------#
-    # find overlap of states
-    def _FindOverlap(
+    # find principal components
+    def _PrincipalComponents(
         self
     )->tuple[np.ndarray, np.ndarray]:
         # compute overlap matrix
@@ -118,13 +118,36 @@ class BandU():
     def MakeXSF(
         self, function_number:list, xsf_file:str
     )->None:
+        '''
+        Method for writing Band-U function as XSF file.
+
+        Parameters
+        ----------
+        function_number : list
+            Defines range of Band-U functions that will be printed.\n
+            List should have only 2 elements.\n
+            First being the first Band-U function to be printed.\n
+            Second being the function number to be printed up to.
+        xsf_file : str
+            Root name given to all XSF files that are printed.
+        '''
+        # check if list has only 2 elements
         if len(function_number) != 2:
             raise ValueError(f'function_number should contain two values, {len(function_number)} were received.')
-        if function_number[0] < 1 or function_number[1] > self.bandu_fxns.shape[0]:
-            raise ValueError(
-                f'function_number range should be no lower than 1 and no greater than {self.bandu_fxns.shape[0]}'
-            )
-        count = function_number[0]
+        # check if function number is within defined range
+        if function_number[0] < 1:
+            print('First element of function_number cannot be lower than 1, changing to 1 now.')
+            function_number[0] = 1
+        # update function number list if it exceeds maximum number of bandu functions
+        if function_number[1] > self.bandu_fxns.shape[0]:
+            print(f'Printing up to max Band-U function number: {self.bandu_fxns.shape[0]}')
+            function_number[1] = self.bandu_fxns.shape[0]
+        # check if lower limit is within defined range
+        if function_number[0] > self.bandu_fxns.shape[0]:
+            count = self.bandu_fxns.shape[0]
+        else:
+            count = function_number[0]
+        # loop over range and print XSF files
         while count <= function_number[1]:
             # fetch nth bandu function coefficients
             bandu_fxn = self.bandu_fxns[function_number[0]+count-2,:]
