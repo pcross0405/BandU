@@ -336,7 +336,6 @@ class Isosurface():
                 sharpness,
                 strategy
             )
-            scalars += 10**(-15)
         if self.save:
             with open(self.save_file, 'ab') as f:
                 pkl.dump(iso_surf, f)
@@ -365,6 +364,7 @@ class Isosurface():
                 metallic=metallic,
                 roughness=roughness,
                 scalars=scalars,
+                clim=[0.0,np.max(scalars)],
                 cmap=colormap,
                 opacity=opacities,
                 color=color,
