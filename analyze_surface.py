@@ -202,8 +202,6 @@ class AnalyzeSurface(Isosurface):
                 iso_surf:pv.PolyData = pkl.load(f)
                 opacities:np.ndarray = pkl.load(f)
                 scalars:np.ndarray = pkl.load(f)
-                if type(scalars) == np.ndarray:
-                    scalars += 10**(-15)
                 all_scalars = np.append(all_scalars, scalars)
                 all_points = np.append(all_points, iso_surf.points, axis=0)
                 if cross_section != []:
@@ -230,8 +228,8 @@ class AnalyzeSurface(Isosurface):
                     metallic=metallic,
                     roughness=roughness,
                     scalars=scalars,
+                    clim=[0.0,np.max(scalars)],
                     cmap=colormap,
-                    clim=[np.min(scalars), np.max(scalars)],
                     opacity=opacities,
                     color=color,
                 )
