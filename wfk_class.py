@@ -1,7 +1,7 @@
 import numpy as np
 from scipy.fft import fftn, ifftn
 import sys
-from typing import Self
+from typing import Self, Generator
 from copy import copy
 np.set_printoptions(threshold=sys.maxsize)
 
@@ -25,6 +25,9 @@ class WFK():
         Necessary for arranging wavefunction coefficients in 3D array.
     syrmel : np.ndarray
         A multidimensional array of 3x3 arrays of symmetry operations
+    non_symm_vec : np.ndarray
+        A multidimensional array of 1x3 arrays of the nonsymmorphic translation vectors for each-
+        symmetry operation.
     nsym : int
         Total number of symmetry operations
     nkpt : int
@@ -60,16 +63,17 @@ class WFK():
     '''
     def __init__(
         self, 
-        wfk_coeffs:np.ndarray=None, kpoints:np.ndarray=None, symrel:np.ndarray=None, nsym:int=None, nkpt:int=None, 
-        nbands:int=None, ngfftx:int=None, ngffty:int=None, ngfftz:int=None, eigenvalues:list=None, 
-        fermi_energy:float=None, lattice:np.ndarray=None, natom:int=None, xred:np.ndarray=None, typat:list=None,
-        znucltypat:list=None, pw_indices:np.ndarray=None
+        wfk_coeffs:np.ndarray=np.zeros(1), kpoints:np.ndarray=np.zeros(1), symrel:np.ndarray=np.zeros(1), 
+        nsym:int=0, nkpt:int=0, nbands:int=0, ngfftx:int=0, ngffty:int=0, ngfftz:int=0, eigenvalues:np.ndarray=np.zeros(1), 
+        fermi_energy:float=0.0, lattice:np.ndarray=np.zeros(1), natom:int=0, xred:np.ndarray=np.zeros(1), 
+        typat:list=[], znucltypat:list=[], pw_indices:np.ndarray=np.zeros(1), non_symm_vec:np.ndarray=np.zeros(1)
     )->None:
         self.wfk_coeffs=wfk_coeffs
         self.kpoints=kpoints
         self.pw_indices=pw_indices
         self.symrel=symrel
         self.nsym=nsym
+        self.non_symm_vec=non_symm_vec
         self.nkpt=nkpt
         self.nbands=nbands
         self.ngfftx=ngfftx
@@ -87,7 +91,7 @@ class WFK():
 #---------------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
     def GridWFK(
-            self, band_index:int=None
+            self, band_index:int=-1
     )->Self:
         '''
         Returns copy of WFK object with coefficients in numpy 3D array grid.
@@ -107,7 +111,7 @@ class WFK():
             kx = kpt[0]
             ky = kpt[1]
             kz = kpt[2]
-            if band_index != None:
+            if band_index >= 0:
                 gridded_wfk[kz, kx, ky] = self.wfk_coeffs[band_index][k]
             else:
                 gridded_wfk[kz, kx, ky] = self.wfk_coeffs[k]
@@ -182,32 +186,73 @@ class WFK():
     #-----------------------------------------------------------------------------------------------------------------#
     # method for creating symmetrically equivalent points
     def Symmetrize(
-            self, points:np.ndarray=None, values:np.ndarray=None
+            self, points:np.ndarray, values:np.ndarray=np.zeros(1), unique:bool=True
     )->tuple[np.ndarray, np.ndarray]:
         '''
-        Method for generating full reciprocal space cell from irreducible kpoints\n
-        *REQUIRES KPOINTS TO BE IN REDUCED FORMAT, CARTESIAN FORMAT WILL NOT WORK*
+        Method for generating symmetric data from irreducible data\n
+        *KPOINTS MUST BE IN REDUCED FORMAT, CARTESIAN FORMAT WILL NOT WORK*
 
         Parameters
         ----------
         points : np.ndarray
-            Irreducible set of kpoints
+            Irreducible set of points. 
+            Shape of (N,3)
         values : np.ndarray
-            Eigenvalues for irreducible kpoints
+            Values corresponding to irreducible points (such as energy eigenvalues w/ kpoints).
+            Shape of (N,1)
+        unique : bool
+            Check for duplicate points
+            Default is to check (True)
+        use_values : bool
+            Generate symmetric values along with points.
+            Default is to generate values (True)
         '''
         # get symmetry operations and initialize symmetrically equivalent point and value arrays
-        sym_ops = self.symrel
-        ind_len = self.nkpt
+        ind_len = np.shape(points)[0]
+        if values is np.zeros(1):
+            values = np.zeros((ind_len,1))
         sym_pts = np.zeros((self.nsym*ind_len,3))
         sym_vals = np.zeros((self.nsym*ind_len,self.nbands))
-        for i, op in enumerate(sym_ops):
-            new_pts = np.matmul(points, op)
+        for i, op in enumerate(self.symrel):
+            new_pts = np.matmul(points, op) + self.non_symm_vec[i]
             sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
             sym_vals[i*ind_len:(i+1)*ind_len,:] = values
         # points overlap on at edges of each symmetric block, remove duplicates
-        sym_pts, unique_inds = np.unique(sym_pts, return_index=True, axis=0)
-        sym_vals = np.take(sym_vals, unique_inds, axis=0)
+        if unique:
+            sym_pts, unique_inds = np.unique(sym_pts, return_index=True, axis=0)
+            sym_vals = np.take(sym_vals, unique_inds, axis=0)
         return sym_pts, sym_vals
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for creating symmetrically equivalent functions at specified kpoint
+    def SymWFKs(
+        self, kpoint:np.ndarray, band:int=-1
+    )->Generator[Self, None, None]:
+        kpoint = kpoint.reshape((1,3))
+        # find symmetric kpoints
+        sym_kpoints, _ = self.Symmetrize(kpoint, unique=False)
+        sym_kpoints = np.round(sym_kpoints, decimals=15)
+        _, unique_inds = np.unique(sym_kpoints, return_index=True, axis=0)
+        # find symmetric plane wave indices
+        sym_pw_inds, _ = self.Symmetrize(self.pw_indices, unique=False)
+        sym_pw_inds = sym_pw_inds.astype(int)
+        ind_range = self.pw_indices.shape[0]
+        # for each unique kpoint check original point is related by reciprocal lattice vector
+        for ind in unique_inds:
+            diff = np.abs(kpoint - sym_kpoints[ind])
+            diff[diff < 10**(-12)] = 0.0
+            # if not related by reciprocal lattice vector return rotated functions
+            if not np.all(diff == 0.0) and np.all(diff < 0.999):
+                ind1 = ind*ind_range
+                ind2 = (ind+1)*ind_range
+                new_pw_inds = sym_pw_inds[ind1:ind2,:]
+                new_coeffs = copy(self)
+                new_coeffs.pw_indices = new_pw_inds
+                if band >= 0:
+                    new_coeffs.wfk_coeffs=self.wfk_coeffs[band]
+                    yield new_coeffs
+                else:
+                    new_coeffs.wfk_coeffs=self.wfk_coeffs
+                    yield new_coeffs
     #-----------------------------------------------------------------------------------------------------------------#
     # method for expanding a grid into XSF format
     def XSFFormat(
