@@ -13,7 +13,7 @@ atom_labels = {1:'H', 2:'He', 3:'Li', 4:'Be', 5:'B', 6:'C', 7:'N', 8:'O', 9:'F',
 class XSF():
     def __init__(
             self, 
-            xsf_file:str=None
+            xsf_file:str='WFK.xsf'
         )->None:
     # if xsf file is supplied, read in parameters
         self.xsf_file = xsf_file
@@ -60,6 +60,7 @@ class XSF():
         undo_xsf : bool
             If True (which is the default), then the XSF formatting is undone by removing end points.
         '''
+        density_lines:list|np.ndarray=[]
         for i, line in enumerate(self.xsf_lines):
             # get density block, this assumes density is the end most data grid in the XSF
             if line.strip() == 'DATAGRID_3D_DENSITY':
@@ -73,6 +74,8 @@ class XSF():
                 # cast line back to a single string
                 last_line = ' '.join(last_line)
                 density_lines[-1] = last_line
+        if density_lines is []:
+            raise LookupError('3D density data not found in XSF file')
         # convert density to 3D array of floats
         density_lines = [line.strip().split(' ') for line in density_lines]
         density_lines = [val for line in density_lines for val in line]
