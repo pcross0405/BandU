@@ -1,10 +1,12 @@
 import numpy as np
 from typing import Generator
 from wfk_class import WFK
+from copy import copy
 
 class BandU():
     def __init__(
-        self, wfks:Generator, energy_level:float, width:float, grid:bool=True, fft:bool=True, norm:bool=True
+        self, wfks:Generator, energy_level:float, width:float, grid:bool=True, fft:bool=True, norm:bool=True,
+        sym:bool=True
     )->None:
         '''
         BandU object with methods for finding states and computing BandU functions from states.
@@ -28,38 +30,54 @@ class BandU():
             Determines whether or not wavefunction coefficients are normalized.
             Default normalizes coefficients (True)
         '''
+        self.grid=grid
+        self.fft=fft
+        self.norm=norm
+        self.sym=sym
+        self.total_states:int=0
+        self._found_fxns:list[WFK]=[]
+        self.bandu_fxns:np.ndarray
+        self.ngfftx:int
+        self.ngffty:int
+        self.ngfftz:int
+        self.fermi_energy:float
+        self.lattice:np.ndarray
+        self.natom:int
+        self.xred:np.ndarray
+        self.typat:list[int]
+        self.znucltypat:list[float]
         # find all states within width
-        self.bandu_fxns, total_states, fermi_energy = self._FindStates(energy_level, width, wfks, grid, fft, norm)
+        self._FindStates(energy_level, width, wfks)
+        # grid, fourier transform, and normalize functions if necessary
+        self._Manipulate()
         # find overlap of states and diagonalize
         principal_vals, principal_vecs = self._PrincipalComponents()
         # linear combination of states weighted by principal components
         self.bandu_fxns = np.matmul(principal_vecs, self.bandu_fxns)
         # normalize bandu functions
-        for i in range(total_states):
+        for i in range(self.total_states):
             normal_coeffs = WFK(wfk_coeffs=self.bandu_fxns[i,:]).Normalize()
             self.bandu_fxns[i,:] = normal_coeffs.wfk_coeffs
         # write output file
         with open('eigenvalues.out', 'w') as f:
             print(f'Width is {width}', file=f)
-            print(f'Energy level: {energy_level+fermi_energy}, Fermi energy: {fermi_energy}', file=f)
-            print(principal_vals, file=f)
+            print(f'Energy level: {energy_level+self.fermi_energy}, Fermi energy: {self.fermi_energy}', file=f)
+            print(principal_vals, file=f)            
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
     def _FindStates(
-        self, energy_level:float, width:float, wfks:Generator, grid:bool, fft:bool, norm:bool
-    )->tuple[np.ndarray, int, float]:
-        # total number of states found within width
-        total_states = 0
-        # list for capturing all wfk coeffs of states within width
-        u_vecs = []
+        self, energy_level:float, width:float, wfks:Generator
+    )->None:
         # state will be a WFK type
         state:WFK
+        # variable for getting info during first iteration
+        first_iter = True
         # loop through every state
         for i, state in enumerate(wfks):
             # pick necessary attributes for XSF writing
-            if i == 0:
+            if first_iter:
                 self.ngfftx = state.ngfftx
                 self.ngffty = state.ngffty
                 self.ngfftz = state.ngfftz
@@ -68,35 +86,60 @@ class BandU():
                 self.typat = state.typat
                 self.znucltypat = state.znucltypat
                 self.xred = state.xred
-                fermi_energy = state.fermi_energy
-                energy_level += fermi_energy
+                self.fermi_energy = state.fermi_energy
+                energy_level += self.fermi_energy
+                first_iter = False
             # check if state has a band that crosses the width
-            for i, band in enumerate(state.eigenvalues):
+            for j, band in enumerate(state.eigenvalues):
                 if energy_level - width/2 <= band <= energy_level + width/2:
-                    total_states += 1
                     # convert state to real space and add to u_vec list
                     coeffs = WFK(
-                        wfk_coeffs=np.array(state.wfk_coeffs[i]),
+                        wfk_coeffs=np.array(state.wfk_coeffs[j]),
                         pw_indices=np.array(state.pw_indices),
                         ngfftx=self.ngfftx,
                         ngffty=self.ngffty,
-                        ngfftz=self.ngfftz
+                        ngfftz=self.ngfftz,
+                        kpoints=state.kpoints[i],
+                        nsym=state.nsym,
+                        symrel=state.symrel,
+                        non_symm_vec=state.non_symm_vec
                     )
-                    if grid:
-                        coeffs = coeffs.GridWFK()
-                    if fft:
-                        coeffs = coeffs.FFT()
-                    if norm:
-                        coeffs = coeffs.Normalize()
-                    u_vecs.append(coeffs.wfk_coeffs)
-        if total_states == 0:
+                    self._found_fxns.append(coeffs)
+        if self._found_fxns is []:
             raise ValueError(
-            f'''Identified 0 states within provided width.
-            Action: Increase width or increase fineness of k-point mesh.
+            '''Identified 0 states within provided width.
+            Action: Increase width or increase fineness of kpoint grid.
             ''')
-        # after FFT the wfk coefficients are reshaped from grid to vector for subsequent matrix operations
-        u_vecs = np.array(u_vecs).reshape(total_states, self.ngfftx*self.ngffty*self.ngfftz)
-        return u_vecs, total_states, fermi_energy
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for manipulating states identified from FindStates
+    def _Manipulate(
+            self
+    )->None:
+        funcs = []
+        if self.sym:
+            #for sym_fxn in self._SymWFKs(state=state, band=j, kpoint=state.kpoints[i]):
+            #    total_states += 1
+            #    u_vecs.append(sym_fxn)
+            for coeffs in self._found_fxns:
+                for sym_coeffs in coeffs.SymWFKs(kpoint=coeffs.kpoints):
+                    self.total_states += 1
+                    funcs.append(sym_coeffs)
+        else:
+            self.total_states = len(self._found_fxns)
+            funcs = self._found_fxns
+        del self._found_fxns
+        if self.grid:
+            for i, coeffs in enumerate(funcs):
+                funcs[i] = coeffs.GridWFK()
+        if self.fft:
+            for i, coeffs in enumerate(funcs):
+                funcs[i] = coeffs.FFT()
+        if self.norm:
+            for i, coeffs in enumerate(funcs):
+                funcs[i] = coeffs.Normalize()
+        funcs = [state.wfk_coeffs for state in funcs]
+        funcs = np.array(funcs, dtype=complex).reshape(self.total_states, self.ngfftx*self.ngffty*self.ngfftz)
+        self.bandu_fxns = funcs
     #-----------------------------------------------------------------------------------------------------------------#
     # find principal components
     def _PrincipalComponents(
