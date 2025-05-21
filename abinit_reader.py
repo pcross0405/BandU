@@ -5,10 +5,10 @@ import sys
 from wfk_class import WFK
 np.set_printoptions(threshold=sys.maxsize)
 
-def bytes2float(bin_data):
+def bytes2float(bin_data)->float:
     return struct.unpack('<d', bin_data)[0]
 
-def bytes2int(bin_data):
+def bytes2int(bin_data)->int:
     return int.from_bytes(bin_data, 'little', signed=True)
 
 class Abinit7WFK():
@@ -87,27 +87,27 @@ class Abinit7WFK():
         # unpack integers
         self.usewvl = bytes2int(wfk.read(4))
         wfk.read(8)
-        self.istwfk = []
+        self.istwfk:list[int] = []
         for i in range(self.nkpt):
             val = bytes2int(wfk.read(4))
             self.istwfk.append(val)    
-        self.bands = []
+        self.bands:list[int] = []
         for i in range(self.nkpt*self.nsppol):
             val = bytes2int(wfk.read(4))
             self.bands.append(val)
-        self.npwarr = []
+        self.npwarr:list[int] = []
         for i in range(self.nkpt):
             val = bytes2int(wfk.read(4))
             self.npwarr.append(val)
-        self.so_psp = []
+        self.so_psp:list[int] = []
         for i in range(self.npsp):
             val = bytes2int(wfk.read(4))
             self.so_psp.append(val)
-        self.symafm = []
+        self.symafm:list[int] = []
         for i in range(self.nsym):
             val = bytes2int(wfk.read(4))
             self.symafm.append(val)
-        self.symrel = []
+        self.symrel:list[np.ndarray] = []
         for i in range(self.nsym):
             arr = np.zeros((3,3))
             arr[0,0] = bytes2int(wfk.read(4))
@@ -120,43 +120,49 @@ class Abinit7WFK():
             arr[1,2] = bytes2int(wfk.read(4))
             arr[2,2] = bytes2int(wfk.read(4))
             self.symrel.append(arr)
-        self.typat = []
+        self.typat:list[int] = []
         for i in range(self.natom):
             val = bytes2int(wfk.read(4))
             self.typat.append(val)
         #--------------#
         # unpack doubles
-        self.kpts = []
+        self.kpts:list[np.ndarray] = []
         for i in range(self.nkpt):
             vec = np.zeros(3)
             vec[0] = bytes2float(wfk.read(8))
             vec[1] = bytes2float(wfk.read(8))
             vec[2] = bytes2float(wfk.read(8))
             self.kpts.append(vec)
-        self.occ = []
+        self.occ:list[float] = []
         for i in range(self.bandtot):
             val = bytes2float(wfk.read(8))
             self.occ.append(val)
-        self.tnons = []
+        self.tnons:list[np.ndarray] = []
         for i in range(self.nsym):
             vec = np.zeros(3)
             vec[0] = bytes2float(wfk.read(8))
             vec[1] = bytes2float(wfk.read(8))
             vec[2] = bytes2float(wfk.read(8))
             self.tnons.append(vec)
-        self.znucltypat = []
+        self.znucltypat:list[float] = []
         for i in range(self.ntypat):
             val = bytes2float(wfk.read(8))
             self.znucltypat.append(val)
-        self.wtk = []           
+        self.wtk:list[float] = []           
         for i in range(self.nkpt):
             val = bytes2float(wfk.read(8))
             self.wtk.append(val)
         #-----------------------#
         # unpack pseudopotentials
         wfk.read(4)
-        self.title = self.znuclpsp = self.zionpsp = self.pspso = self.pspdat = self.pspcod = []
-        self.pspxc = self.lmn_size = []
+        self.title:list[str] = []
+        self.znuclpsp:list[float] = []
+        self.zionpsp:list[float] = []
+        self.pspso:list[int] = []
+        self.pspdat:list[int] = []
+        self.pspcod:list[int] = []
+        self.pspxc:list[int] = []
+        self.lmn_size:list[int] = []
         for i in range(self.npsp):
             wfk.read(4)
             self.title.append(wfk.read(132).decode())
@@ -172,7 +178,7 @@ class Abinit7WFK():
         # unpack coordinates
         wfk.read(4)
         self.residm = bytes2float(wfk.read(8))
-        self.xred = []
+        self.xred:list[np.ndarray] = []
         for i in range(self.natom):
             vec = np.zeros(3)
             vec[0] = bytes2float(wfk.read(8))
@@ -208,10 +214,10 @@ class Abinit7WFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                pw_indices = []
-                eigenvalues = []
-                occupancies = []
-                coeffs = []
+                pw_indices:list[tuple] = []
+                eigenvalues:list[float] = []
+                occupancies:list[float] = []
+                coeffs:list[list[complex]] = []
                 wfk.read(4)
                 npw = bytes2int(wfk.read(4))
                 self.nspinor = bytes2int(wfk.read(4))
@@ -232,7 +238,7 @@ class Abinit7WFK():
                 wfk.read(4)
                 for nband in range(nband_temp):
                     wfk.read(4)
-                    cg = []
+                    cg:list[complex] = []
                     for pw in range(npw):
                         cg1 = bytes2float(wfk.read(8))
                         cg2 = bytes2float(wfk.read(8))
@@ -240,23 +246,24 @@ class Abinit7WFK():
                     coeffs.append(cg)
                     wfk.read(4)       
                 yield WFK(
-                    eigenvalues=eigenvalues, 
-                    wfk_coeffs=coeffs,
-                    pw_indices=pw_indices,
-                    kpoints=self.kpts,
+                    eigenvalues=np.array(eigenvalues), 
+                    wfk_coeffs=np.array(coeffs),
+                    pw_indices=np.array(pw_indices),
+                    kpoints=np.array(self.kpts),
                     nkpt=self.nkpt,
                     nbands=self.bands[0],
                     ngfftx=self.ngfftx,
                     ngffty=self.ngffty,
                     ngfftz=self.ngfftz,
-                    symrel=self.symrel,
+                    symrel=np.array(self.symrel),
                     nsym=self.nsym,
                     lattice=self.real_lattice,
                     natom=self.natom,
-                    xred=self.xred,
+                    xred=np.array(self.xred),
                     typat=self.typat,
                     znucltypat=self.znucltypat,
-                    fermi_energy=self.fermi
+                    fermi_energy=self.fermi,
+                    non_symm_vec=np.array(self.tnons)
                 )
         print('WFK body read')
         wfk.close()
@@ -282,7 +289,7 @@ class Abinit7WFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                eigenvalues = []
+                eigenvalues:list[float] = []
                 wfk.read(4)
                 npw = bytes2int(wfk.read(4))
                 self.nspinor = bytes2int(wfk.read(4))
@@ -299,21 +306,22 @@ class Abinit7WFK():
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
                 yield WFK(
-                    eigenvalues=eigenvalues, 
-                    kpoints=self.kpts,
+                    eigenvalues=np.array(eigenvalues), 
+                    kpoints=np.array(self.kpts),
                     nkpt=self.nkpt,
                     nbands=self.bands[0],
                     ngfftx=self.ngfftx,
                     ngffty=self.ngffty,
                     ngfftz=self.ngfftz,
-                    symrel=self.symrel,
+                    symrel=np.array(self.symrel),
                     nsym=self.nsym,
                     lattice=self.real_lattice,
                     natom=self.natom,
-                    xred=self.xred,
+                    xred=np.array(self.xred),
                     typat=self.typat,
                     znucltypat=self.znucltypat,
-                    fermi_energy=self.fermi
+                    fermi_energy=self.fermi,
+                    non_symm_vec=np.array(self.tnons)
                 )
         print('WFK body read')
         wfk.close()
@@ -398,27 +406,27 @@ class Abinit10WFK():
         self.nshiftk = bytes2int(wfk.read(4))
         self.mband = bytes2int(wfk.read(4))
         wfk.read(8)
-        self.istwfk = []
+        self.istwfk:list[int] = []
         for _ in range(self.nkpt):
             val = bytes2int(wfk.read(4))
             self.istwfk.append(val)      
-        self.bands = []
+        self.bands:list[int] = []
         for _ in range(self.nkpt*self.nsppol):
             val = bytes2int(wfk.read(4))
             self.bands.append(val)
-        self.npwarr = []
+        self.npwarr:list[int] = []
         for _ in range(self.nkpt):
             val = bytes2int(wfk.read(4))
             self.npwarr.append(val)
-        self.so_psp = []
+        self.so_psp:list[int] = []
         for _ in range(self.npsp):
             val = bytes2int(wfk.read(4))
             self.so_psp.append(val)
-        self.symafm = []
+        self.symafm:list[int] = []
         for _ in range(self.nsym):
             val = bytes2int(wfk.read(4))
             self.symafm.append(val)
-        self.symrel = []
+        self.symrel:list[np.ndarray] = []
         for _ in range(self.nsym):
             arr = np.zeros((3,3))
             arr[0,0] = bytes2int(wfk.read(4))
@@ -431,35 +439,35 @@ class Abinit10WFK():
             arr[1,2] = bytes2int(wfk.read(4))
             arr[2,2] = bytes2int(wfk.read(4))
             self.symrel.append(arr)
-        self.typat = []
+        self.typat:list[int] = []
         for _ in range(self.natom):
             val = bytes2int(wfk.read(4))
             self.typat.append(val)
         #--------------#
         # unpack doubles
-        self.kpts = []
+        self.kpts:list[np.ndarray] = []
         for _ in range(self.nkpt):
             vec = np.zeros(3)
             vec[0] = bytes2float(wfk.read(8))
             vec[1] = bytes2float(wfk.read(8))
             vec[2] = bytes2float(wfk.read(8))
             self.kpts.append(vec)
-        self.occ = []
+        self.occ:list[float] = []
         for _ in range(self.bandtot):
             val = bytes2float(wfk.read(8))
             self.occ.append(val)
-        self.tnons = []
+        self.tnons:list[np.ndarray] = []
         for _ in range(self.nsym):
             vec = np.zeros(3)
             vec[0] = bytes2float(wfk.read(8))
             vec[1] = bytes2float(wfk.read(8))
             vec[2] = bytes2float(wfk.read(8))
             self.tnons.append(vec)
-        self.znucltypat = []
+        self.znucltypat:list[float] = []
         for _ in range(self.ntypat):
             val = bytes2float(wfk.read(8))
             self.znucltypat.append(val)
-        self.wtk = []           
+        self.wtk:list[float] = []           
         for _ in range(self.nkpt):
             val = bytes2float(wfk.read(8))
             self.wtk.append(val)
@@ -467,7 +475,7 @@ class Abinit10WFK():
         # unpack coordinates
         wfk.read(8)
         self.residm = bytes2float(wfk.read(8))
-        self.xred = []
+        self.xred:list[np.ndarray] = []
         for _ in range(self.natom):
             vec = np.zeros(3)
             vec[0] = bytes2float(wfk.read(8))
@@ -480,7 +488,7 @@ class Abinit10WFK():
         self.fermi = bytes2float(wfk.read(8))
         #-------------#
         # unpack floats
-        self.amu = []
+        self.amu:list[float] = []
         for _ in range(self.ntypat):
             val = bytes2float(wfk.read(8))
             self.amu.append(val)
@@ -531,8 +539,15 @@ class Abinit10WFK():
         #-----------------------#
         # unpack pseudopotentials
         wfk.read(4)
-        self.title = self.znuclpsp = self.zionpsp = self.pspso = self.pspdat = self.pspcod = []
-        self.pspxc = self.lmn_size = self.md5_pseudos = []
+        self.title:list[str] = []
+        self.znuclpsp:list[float] = []
+        self.zionpsp:list[float] = []
+        self.pspso:list[int] = []
+        self.pspdat:list[int] = []
+        self.pspcod:list[int] = []
+        self.pspxc:list[int] = []
+        self.lmn_size:list[int] = []
+        self.md5_pseudos:list[str] = []
         for _ in range(self.npsp):
             wfk.read(4)
             self.title.append(wfk.read(132).decode())
@@ -549,7 +564,7 @@ class Abinit10WFK():
         # unpack PAW data
         if self.usepaw == 1:
             wfk.read(4)
-            self.nrho = []
+            self.nrho:list[int] = []
             for _ in range(self.natom):
                 for _ in range(self.nspden):
                     nrhoij = bytes2int(wfk.read(4))
@@ -557,14 +572,14 @@ class Abinit10WFK():
             self.cplex = bytes2int(wfk.read(4))
             self.nspden_paw = bytes2int(wfk.read(4))
             wfk.read(8)
-            self.irho = []
+            self.irho:list[int] = []
             for i in range(self.natom):
                 for _ in range(self.nspden_paw):
                     nrhoij = self.nrho[i]
                     for _ in range(nrhoij):
                         rhoij = bytes2int(wfk.read(4))
                         self.irho.append(rhoij)
-            self.rho=[]
+            self.rho:list[float] = []
             for i in range(self.natom):
                     for _ in range(self.nspden_paw):
                         nrhoij = self.nrho[i]
@@ -615,10 +630,10 @@ class Abinit10WFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                pw_indices = []
-                eigenvalues = []
-                occupancies = []
-                coeffs = []
+                pw_indices:list[tuple] = []
+                eigenvalues:list[float] = []
+                occupancies:list[float] = []
+                coeffs:list[list[complex]] = []
                 wfk.read(4)
                 npw = bytes2int(wfk.read(4))
                 self.nspinor = bytes2int(wfk.read(4))
@@ -639,7 +654,7 @@ class Abinit10WFK():
                 wfk.read(4)
                 for nband in range(nband_temp):
                     wfk.read(4)
-                    cg = []
+                    cg:list[complex] = []
                     for pw in range(npw):
                         cg1 = bytes2float(wfk.read(8))
                         cg2 = bytes2float(wfk.read(8))
@@ -647,23 +662,24 @@ class Abinit10WFK():
                     coeffs.append(cg)
                     wfk.read(4) 
                 yield WFK(
-                    eigenvalues=eigenvalues, 
-                    wfk_coeffs=coeffs,
-                    pw_indices=pw_indices,
-                    kpoints=self.kpts,
+                    eigenvalues=np.array(eigenvalues), 
+                    wfk_coeffs=np.array(coeffs),
+                    pw_indices=np.array(pw_indices),
+                    kpoints=np.array(self.kpts),
                     nkpt=self.nkpt,
                     nbands=self.bands[0],
                     ngfftx=self.ngfftx,
                     ngffty=self.ngffty,
                     ngfftz=self.ngfftz,
-                    symrel=self.symrel,
+                    symrel=np.array(self.symrel),
                     nsym=self.nsym,
                     lattice=self.real_lattice,
                     natom=self.natom,
-                    xred=self.xred,
+                    xred=np.array(self.xred),
                     typat=self.typat,
                     znucltypat=self.znucltypat,
-                    fermi_energy=self.fermi
+                    fermi_energy=self.fermi,
+                    non_symm_vec=np.array(self.tnons)
                 )
         print('WFK body read')
         wfk.close()
@@ -694,7 +710,7 @@ class Abinit10WFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                eigenvalues = []
+                eigenvalues:list[float] = []
                 wfk.read(4)
                 npw = bytes2int(wfk.read(4))
                 self.nspinor = bytes2int(wfk.read(4))
@@ -711,21 +727,22 @@ class Abinit10WFK():
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
                 yield WFK(
-                    eigenvalues=eigenvalues, 
-                    kpoints=self.kpts,
+                    eigenvalues=np.array(eigenvalues), 
+                    kpoints=np.array(self.kpts),
                     nkpt=self.nkpt,
                     nbands=self.bands[0],
                     ngfftx=self.ngfftx,
                     ngffty=self.ngffty,
                     ngfftz=self.ngfftz,
-                    symrel=self.symrel,
+                    symrel=np.array(self.symrel),
                     nsym=self.nsym,
                     lattice=self.real_lattice,
                     natom=self.natom,
-                    xred=self.xred,
+                    xred=np.array(self.xred),
                     typat=self.typat,
                     znucltypat=self.znucltypat,
-                    fermi_energy=self.fermi
+                    fermi_energy=self.fermi,
+                    non_symm_vec=np.array(self.tnons)
                 )
         print('WFK body read')
         wfk.close()
