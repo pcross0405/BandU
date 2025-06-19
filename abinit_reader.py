@@ -196,7 +196,7 @@ class Abinit7WFK():
     # method to read entire body of abinit version 7 wavefunction file
     def ReadWFK(
         self
-    )->Generator:
+    )->Generator[WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v7 WFK file.
         '''
@@ -263,7 +263,7 @@ class Abinit7WFK():
                     typat=self.typat,
                     znucltypat=self.znucltypat,
                     fermi_energy=self.fermi,
-                    non_symm_vec=np.array(self.tnons)
+                    non_symm_vecs=np.array(self.tnons)
                 )
         print('WFK body read')
         wfk.close()
@@ -271,7 +271,7 @@ class Abinit7WFK():
     # method to read only eigenvalues from body of abinit version 7 wavefunction file
     def ReadEigenvalues(
         self
-    )->Generator:
+    )->Generator[WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v7 WFK file.
         '''
@@ -321,7 +321,7 @@ class Abinit7WFK():
                     typat=self.typat,
                     znucltypat=self.znucltypat,
                     fermi_energy=self.fermi,
-                    non_symm_vec=np.array(self.tnons)
+                    non_symm_vecs=np.array(self.tnons)
                 )
         print('WFK body read')
         wfk.close()
@@ -579,6 +579,7 @@ class Abinit10WFK():
                     for _ in range(nrhoij):
                         rhoij = bytes2int(wfk.read(4))
                         self.irho.append(rhoij)
+            wfk.read(4)
             self.rho:list[float] = []
             for i in range(self.natom):
                     for _ in range(self.nspden_paw):
@@ -593,7 +594,7 @@ class Abinit10WFK():
     # method to read entire body of abinit version 7 wavefunction file
     def ReadWFK(
         self
-    )->Generator:
+    )->Generator[WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v10 WFK file.
         '''
@@ -608,7 +609,7 @@ class Abinit10WFK():
             wfk.read(4)
             for _ in range(self.natom):
                 for _ in range(self.nspden):
-                    nrhoij = bytes2int(wfk.read(4))
+                    _ = wfk.read(4)
             wfk.read(4)
             wfk.read(4)
             wfk.read(8)
@@ -616,12 +617,13 @@ class Abinit10WFK():
                 for _ in range(self.nspden_paw):
                     nrhoij = self.nrho[i]
                     for _ in range(nrhoij):
-                        wfk.read(4)
+                        _ = wfk.read(4)
+            wfk.read(4)
             for i in range(self.natom):
-                    for _ in range(self.nspden_paw):
-                        nrhoij = self.nrho[i]
-                        for _ in range(nrhoij):
-                            wfk.read(8)
+                for _ in range(self.nspden_paw):
+                    nrhoij = self.nrho[i]
+                    for _ in range(nrhoij):
+                        _ = wfk.read(8)
             wfk.read(4)
         #-------------------------------#
         # begin reading wavefunction body
@@ -679,7 +681,7 @@ class Abinit10WFK():
                     typat=self.typat,
                     znucltypat=self.znucltypat,
                     fermi_energy=self.fermi,
-                    non_symm_vec=np.array(self.tnons)
+                    non_symm_vecs=np.array(self.tnons)
                 )
         print('WFK body read')
         wfk.close()
@@ -687,7 +689,7 @@ class Abinit10WFK():
     # method to read only eigenvalues from body of abinit version 7 wavefunction file
     def ReadEigenvalues(
         self
-    )->Generator:
+    )->Generator[WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v10 WFK file.
         '''
@@ -699,10 +701,25 @@ class Abinit10WFK():
         wfk.read(8*(4*self.nkpt + self.bandtot + 3*self.nsym + 2*self.ntypat + 3*self.natom))
         wfk.read(self.npsp*(208))
         if self.usepaw == 1:
-            wfk.read(24)
-            wfk.read(4*self.natom*self.nspden)
-            for i in self.nrho:
-                wfk.read(12*self.natom*self.nspden_paw*i)
+            wfk.read(4)
+            for _ in range(self.natom):
+                for _ in range(self.nspden):
+                    _ = wfk.read(4)
+            wfk.read(4)
+            wfk.read(4)
+            wfk.read(8)
+            for i in range(self.natom):
+                for _ in range(self.nspden_paw):
+                    nrhoij = self.nrho[i]
+                    for _ in range(nrhoij):
+                        _ = wfk.read(4)
+            wfk.read(4)
+            for i in range(self.natom):
+                for _ in range(self.nspden_paw):
+                    nrhoij = self.nrho[i]
+                    for _ in range(nrhoij):
+                        _ = wfk.read(8)
+            wfk.read(4)
         #-------------------------------#
         # begin reading wavefunction body
         for i in range(self.nsppol):
@@ -742,7 +759,7 @@ class Abinit10WFK():
                     typat=self.typat,
                     znucltypat=self.znucltypat,
                     fermi_energy=self.fermi,
-                    non_symm_vec=np.array(self.tnons)
+                    non_symm_vecs=np.array(self.tnons)
                 )
         print('WFK body read')
         wfk.close()
