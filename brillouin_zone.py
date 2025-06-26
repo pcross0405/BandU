@@ -9,7 +9,7 @@ class BZ():
     )->None:
         self.rec_latt = rec_latt
         _3xgrid, _ = translate.TranslatePoints(np.zeros((1,3)), np.zeros(1), self.rec_latt)
-        self._3xgrid = np.unique(_3xgrid, axis=0)
+        self._3xgrid = _3xgrid
         self.vertices = self._BZpts()
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
@@ -94,21 +94,18 @@ class BZ():
         # make points mulitdimensional if not already
         if len(points.shape) == 1:
             points = points.reshape((1,points.shape[0]))
-        # convert to cartesian or to reduced format
+        # convert to cartesian
         if cart:
-            cart_pts = np.matmul(points, self.rec_latt)
-            red_pts = points
-        else:
-            red_pts = np.matmul(points, np.linalg.inv(self.rec_latt))
-            cart_pts = points
+            points = np.matmul(points, self.rec_latt)
         # find points outside of BZ
-        outside_pts = Delaunay(self.vertices).find_simplex(cart_pts)
+        outside_pts = Delaunay(self.vertices).find_simplex(points)
         # calculate shifts to move outside points back into BZ
         shifts = np.zeros((outside_pts[outside_pts < 0].shape[0],3))
-        for i, pt in enumerate(red_pts[outside_pts < 0]):
-            shift1 = np.array([-1 if k <= -0.5 else 0 for k in pt])
-            shift2 = np.array([1 if k >= 0.5 else 0 for k in pt])
-            shifts[i,:] = shift1 + shift2
+        rec_grid = KDTree(self._3xgrid)
+        shift_grid, _ = translate.TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
+        for i, pt in enumerate(points[outside_pts < 0]):
+            _, closest_pt = rec_grid.query(pt, k=1)
+            shifts[i,:] = shift_grid[closest_pt, :]
         all_shifts = np.zeros((points.shape[0],3))
         all_shifts[outside_pts < 0] = shifts
         return all_shifts.astype(int)
