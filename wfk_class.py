@@ -61,13 +61,19 @@ class WFK():
     znucltypat : list
         List of element names
         First element of list should correspond to typat label 1, second element to label 2 and so on
+    time_reversal : bool
+        Select whether system has time reversal symmetry or not
+        If the system is time reversal symmetric, then reciprocal space electronic states will share inversion 
+        symmetry even if the real space symmetries do not include inversion
+        Default assumes system has time reversal symmetry (True)
     '''
     def __init__(
         self, 
         wfk_coeffs:np.ndarray=np.zeros(1), kpoints:np.ndarray=np.zeros(1), symrel:np.ndarray=np.zeros(1), 
-        nsym:int=0, nkpt:int=0, nbands:int=0, ngfftx:int=0, ngffty:int=0, ngfftz:int=0, eigenvalues:np.ndarray=np.zeros(1), 
-        fermi_energy:float=0.0, lattice:np.ndarray=np.zeros(1), natom:int=0, xred:np.ndarray=np.zeros(1), 
-        typat:list=[], znucltypat:list=[], pw_indices:np.ndarray=np.zeros(1), non_symm_vecs:np.ndarray=np.zeros(1)
+        nsym:int=0, nkpt:int=0, nbands:int=0, ngfftx:int=0, ngffty:int=0, ngfftz:int=0, 
+        eigenvalues:np.ndarray=np.zeros(1),fermi_energy:float=0.0, lattice:np.ndarray=np.zeros(1), natom:int=0, 
+        xred:np.ndarray=np.zeros(1), typat:list=[], znucltypat:list=[], pw_indices:np.ndarray=np.zeros(1), 
+        non_symm_vecs:np.ndarray=np.zeros(1), time_reversal:bool=True
     )->None:
         self.wfk_coeffs=wfk_coeffs
         self.kpoints=kpoints
@@ -87,6 +93,7 @@ class WFK():
         self.xred=xred
         self.typat=typat
         self.znucltypat=znucltypat
+        self.time_reversal=time_reversal
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
@@ -207,8 +214,12 @@ class WFK():
             Default applies forwards operation (False).
         '''
         if reciprocal:
+            tnons = False
             sym_mats = [np.linalg.inv(mat).T for mat in self.symrel]
+            if self.time_reversal:
+                sym_mats = np.concatenate((sym_mats, [-mat for mat in sym_mats]), axis=0)
         else: 
+            tnons = True
             sym_mats = self.symrel
         # initialize symmetrically equivalent point and value arrays
         ind_len = np.shape(points)[0]
@@ -219,11 +230,15 @@ class WFK():
         # apply symmetry operations to points
         if inverse:
             for i, op in enumerate(sym_mats):
+                if tnons:
+                    points -= self.non_symm_vecs[i]
                 new_pts:np.ndarray = np.matmul(np.linalg.inv(op), points.T).T
                 sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
                 sym_vals[i*ind_len:(i+1)*ind_len,:] = values
         else:
             for i, op in enumerate(sym_mats):
+                if tnons:
+                    points -= self.non_symm_vecs[i]
                 new_pts:np.ndarray = np.matmul(op, points.T).T
                 sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
                 sym_vals[i*ind_len:(i+1)*ind_len,:] = values
