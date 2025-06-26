@@ -94,16 +94,6 @@ class WFK():
         self.typat=typat
         self.znucltypat=znucltypat
         self.time_reversal=time_reversal
-        # check if system is noncentrosymmetric
-        if self.time_reversal and self.symrel is not np.zeros(1):
-            # if system is centrosymmetric, do not double reciprocal symmetry operations
-            if -np.identity(3) in self.symrel:
-                self.time_reversal = False
-            else:
-                print('''
-                Noncentrosymmetric system identified, assuming time reversal symmetry
-                To change this set time_reversal attribute to False
-                ''')
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
@@ -223,6 +213,17 @@ class WFK():
             Use inverse symmetry operations.
             Default applies forwards operation (False).
         '''
+        # check if system is noncentrosymmetric
+        if self.time_reversal:
+            # if system is centrosymmetric, do not double reciprocal symmetry operations
+            if -3.0 in [np.trace(mat) for mat in self.symrel]:
+                self.time_reversal = False
+            else:
+                print((
+                'Noncentrosymmetric system identified, assuming time reversal symmetry\n'
+                'To change this, set time_reversal attribute to False'
+                ))
+        # check if reciprocal or real space symmetries will be used
         sym_num = self.nsym
         if reciprocal:
             tnons = False
