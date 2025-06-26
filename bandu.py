@@ -1,7 +1,6 @@
 import numpy as np
 from typing import Generator
 from wfk_class import WFK
-from copy import copy
 
 class BandU():
     def __init__(
@@ -30,12 +29,11 @@ class BandU():
             Determines whether or not wavefunction coefficients are normalized.
             Default normalizes coefficients (True)
         '''
-        self.grid=grid
-        self.fft=fft
-        self.norm=norm
-        self.sym=sym
+        self.grid:bool=grid
+        self.fft:bool=fft
+        self.norm:bool=norm
+        self.sym:bool=sym
         self.total_states:int=0
-        self._found_fxns:list[WFK]=[]
         self.bandu_fxns:np.ndarray
         self.ngfftx:int
         self.ngffty:int
@@ -46,10 +44,11 @@ class BandU():
         self.xred:np.ndarray
         self.typat:list[int]
         self.znucltypat:list[float]
-        # find all states within width
-        self._FindStates(energy_level, width, wfks)
-        # grid, fourier transform, and normalize functions if necessary
-        self._Manipulate()
+        # apply grid, fourier transform, and normalize functions if necessary
+        self._Process(
+            # find all states within width
+            self._FindStates(energy_level, width, wfks)
+        )
         # find overlap of states and diagonalize
         principal_vals, principal_vecs = self._PrincipalComponents()
         # linear combination of states weighted by principal components
@@ -60,16 +59,18 @@ class BandU():
             self.bandu_fxns[i,:] = normal_coeffs.wfk_coeffs
         # write output file
         with open('eigenvalues.out', 'w') as f:
-            print(f'Width is {width}', file=f)
+            print(f'Width: {width}, total states: {self.total_states}', file=f)
             print(f'Energy level: {energy_level+self.fermi_energy}, Fermi energy: {self.fermi_energy}', file=f)
-            print(principal_vals, file=f)            
+            print(np.abs(principal_vals), file=f)            
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
     def _FindStates(
         self, energy_level:float, width:float, wfks:Generator
-    )->None:
+    )->list[WFK]:
+        # list of WFK coefficients within specified range
+        found_fxns = []
         # state will be a WFK type
         state:WFK
         # variable for getting info during first iteration
@@ -94,40 +95,44 @@ class BandU():
                 if energy_level - width/2 <= band <= energy_level + width/2:
                     # convert state to real space and add to u_vec list
                     coeffs = WFK(
-                        wfk_coeffs=np.array(state.wfk_coeffs[j]),
-                        pw_indices=np.array(state.pw_indices),
+                        wfk_coeffs=np.array(state.wfk_coeffs[j], dtype=complex),
+                        pw_indices=np.array(state.pw_indices, dtype=int),
                         ngfftx=self.ngfftx,
                         ngffty=self.ngffty,
                         ngfftz=self.ngfftz,
                         kpoints=state.kpoints[i],
                         nsym=state.nsym,
                         symrel=state.symrel,
-                        non_symm_vec=state.non_symm_vec
+                        non_symm_vecs=state.non_symm_vecs,
+                        lattice=self.lattice,
+                        xred=self.xred,
+                        znucltypat=self.znucltypat,
+                        typat=self.typat,
+                        natom=self.natom
                     )
-                    self._found_fxns.append(coeffs)
-        if self._found_fxns is []:
+                    found_fxns.append(coeffs)
+        if found_fxns is []:
             raise ValueError(
             '''Identified 0 states within provided width.
             Action: Increase width or increase fineness of kpoint grid.
             ''')
+        else:
+            return found_fxns
     #-----------------------------------------------------------------------------------------------------------------#
-    # method for manipulating states identified from FindStates
-    def _Manipulate(
-            self
+    # method for processing planewave coefficient data from FindStates
+    def _Process(
+            self, found_fxns:list[WFK]
     )->None:
         funcs = []
         if self.sym:
-            #for sym_fxn in self._SymWFKs(state=state, band=j, kpoint=state.kpoints[i]):
-            #    total_states += 1
-            #    u_vecs.append(sym_fxn)
-            for coeffs in self._found_fxns:
+            for coeffs in found_fxns:
                 for sym_coeffs in coeffs.SymWFKs(kpoint=coeffs.kpoints):
                     self.total_states += 1
                     funcs.append(sym_coeffs)
         else:
-            self.total_states = len(self._found_fxns)
-            funcs = self._found_fxns
-        del self._found_fxns
+            self.total_states = len(found_fxns)
+            funcs = found_fxns
+        del found_fxns
         if self.grid:
             for i, coeffs in enumerate(funcs):
                 funcs[i] = coeffs.GridWFK()
@@ -139,6 +144,7 @@ class BandU():
                 funcs[i] = coeffs.Normalize()
         funcs = [state.wfk_coeffs for state in funcs]
         funcs = np.array(funcs, dtype=complex).reshape(self.total_states, self.ngfftx*self.ngffty*self.ngfftz)
+        print(f'{self.total_states} states found within specified range.')
         self.bandu_fxns = funcs
     #-----------------------------------------------------------------------------------------------------------------#
     # find principal components
@@ -190,6 +196,7 @@ class BandU():
             count = self.bandu_fxns.shape[0]
         else:
             count = function_number[0]
+        print(f'Writing XSF files for Band-U functions {function_number[0]} through {function_number[1]}.')
         # loop over range and print XSF files
         while count <= function_number[1]:
             # fetch nth bandu function coefficients
