@@ -65,7 +65,7 @@ class WFK():
         Select whether system has time reversal symmetry or not
         If the system is time reversal symmetric, then reciprocal space electronic states will share inversion 
         symmetry even if the real space symmetries do not include inversion
-        Default assumes system has time reversal symmetry (True)
+        Default assumes noncentrosymmetric systems have time reversal symmetry (True)
     '''
     def __init__(
         self, 
@@ -94,6 +94,16 @@ class WFK():
         self.typat=typat
         self.znucltypat=znucltypat
         self.time_reversal=time_reversal
+        # check if system is noncentrosymmetric
+        if self.time_reversal and self.symrel is not np.zeros(1):
+            # if system is centrosymmetric, do not double reciprocal symmetry operations
+            if -np.identity(3) in self.symrel:
+                self.time_reversal = False
+            else:
+                print('''
+                Noncentrosymmetric system identified, assuming time reversal symmetry
+                To change this set time_reversal attribute to False
+                ''')
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
@@ -213,11 +223,13 @@ class WFK():
             Use inverse symmetry operations.
             Default applies forwards operation (False).
         '''
+        sym_num = self.nsym
         if reciprocal:
             tnons = False
             sym_mats = [np.linalg.inv(mat).T for mat in self.symrel]
             if self.time_reversal:
                 sym_mats = np.concatenate((sym_mats, [-mat for mat in sym_mats]), axis=0)
+                sym_num *= 2
         else: 
             tnons = True
             sym_mats = self.symrel
@@ -225,8 +237,8 @@ class WFK():
         ind_len = np.shape(points)[0]
         if values is np.empty([]):
             values = np.zeros((ind_len,1))
-        sym_pts = np.zeros((self.nsym*ind_len,3))
-        sym_vals = np.zeros((self.nsym*ind_len,self.nbands))
+        sym_pts = np.zeros((sym_num*ind_len,3))
+        sym_vals = np.zeros((sym_num*ind_len,self.nbands))
         # apply symmetry operations to points
         if inverse:
             for i, op in enumerate(sym_mats):
