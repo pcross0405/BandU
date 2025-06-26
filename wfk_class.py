@@ -3,6 +3,7 @@ from scipy.fft import fftn, ifftn
 import sys
 from typing import Self, Generator
 from copy import copy
+from brillouin_zone import BZ
 np.set_printoptions(threshold=sys.maxsize)
 
 class WFK():
@@ -66,14 +67,14 @@ class WFK():
         wfk_coeffs:np.ndarray=np.zeros(1), kpoints:np.ndarray=np.zeros(1), symrel:np.ndarray=np.zeros(1), 
         nsym:int=0, nkpt:int=0, nbands:int=0, ngfftx:int=0, ngffty:int=0, ngfftz:int=0, eigenvalues:np.ndarray=np.zeros(1), 
         fermi_energy:float=0.0, lattice:np.ndarray=np.zeros(1), natom:int=0, xred:np.ndarray=np.zeros(1), 
-        typat:list=[], znucltypat:list=[], pw_indices:np.ndarray=np.zeros(1), non_symm_vec:np.ndarray=np.zeros(1)
+        typat:list=[], znucltypat:list=[], pw_indices:np.ndarray=np.zeros(1), non_symm_vecs:np.ndarray=np.zeros(1)
     )->None:
         self.wfk_coeffs=wfk_coeffs
         self.kpoints=kpoints
         self.pw_indices=pw_indices
         self.symrel=symrel
         self.nsym=nsym
-        self.non_symm_vec=non_symm_vec
+        self.non_symm_vecs=non_symm_vecs
         self.nkpt=nkpt
         self.nbands=nbands
         self.ngfftx=ngfftx
@@ -124,8 +125,8 @@ class WFK():
             self
     )->Self:
         '''
-        Returns copy of WFK with wavefunction coefficients in expressed in real space.
-        Assumes existing wavefunction coefficients are expressed in reciprocal space. 
+        Returns copy of WFK with wavefunction coefficients expressed in real space.
+        Assumes existing wavefunction coefficients are expressed in reciprocal space.
         '''
         # Fourier transform reciprocal grid to real space grid
         real_coeffs = fftn(self.wfk_coeffs, norm='ortho')
@@ -167,12 +168,7 @@ class WFK():
         self
     )->np.ndarray:
         '''
-        Method for converting the real space lattice parameters to reciprocal lattice parameters
-
-        Parameters
-        ----------
-        real_lat : np.ndarray
-            3x3 numpy array containing real space lattice parameters.
+        Method for converting the real space lattice parameters to reciprocal lattice parameters.
         '''
         # conversion by default converts Angstrom to Bohr since ABINIT uses Bohr
         a = self.lattice[0,:]
@@ -186,37 +182,51 @@ class WFK():
     #-----------------------------------------------------------------------------------------------------------------#
     # method for creating symmetrically equivalent points
     def Symmetrize(
-            self, points:np.ndarray, values:np.ndarray=np.zeros(1), unique:bool=True
+            self, points:np.ndarray, values:np.ndarray=np.empty([]), unique:bool=True, reciprocal:bool=False,
+            inverse:bool=False
     )->tuple[np.ndarray, np.ndarray]:
         '''
-        Method for generating symmetric data from irreducible data\n
-        *KPOINTS MUST BE IN REDUCED FORMAT, CARTESIAN FORMAT WILL NOT WORK*
+        Method for generating symmetric data from irreducible data.
 
         Parameters
         ----------
         points : np.ndarray
-            Irreducible set of points. 
-            Shape of (N,3)
+            Irreducible set of points.
+            Shape of (N,3).
         values : np.ndarray
             Values corresponding to irreducible points (such as energy eigenvalues w/ kpoints).
-            Shape of (N,1)
+            Shape of (N,1).
         unique : bool
-            Check for duplicate points
-            Default is to check (True)
-        use_values : bool
-            Generate symmetric values along with points.
-            Default is to generate values (True)
+            Check for duplicate points.
+            Default is to check (True).
+        reciprocal : bool
+            Calculate reciprocal space symmetry matrices from real space matrices.
+            Default uses real space matrices (False).
+        inverse : bool
+            Use inverse symmetry operations.
+            Default applies forwards operation (False).
         '''
-        # get symmetry operations and initialize symmetrically equivalent point and value arrays
+        if reciprocal:
+            sym_mats = [np.linalg.inv(mat).T for mat in self.symrel]
+        else: 
+            sym_mats = self.symrel
+        # initialize symmetrically equivalent point and value arrays
         ind_len = np.shape(points)[0]
-        if values is np.zeros(1):
+        if values is np.empty([]):
             values = np.zeros((ind_len,1))
         sym_pts = np.zeros((self.nsym*ind_len,3))
         sym_vals = np.zeros((self.nsym*ind_len,self.nbands))
-        for i, op in enumerate(self.symrel):
-            new_pts = np.matmul(points, op) + self.non_symm_vec[i]
-            sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
-            sym_vals[i*ind_len:(i+1)*ind_len,:] = values
+        # apply symmetry operations to points
+        if inverse:
+            for i, op in enumerate(sym_mats):
+                new_pts:np.ndarray = np.matmul(np.linalg.inv(op), points.T).T
+                sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
+                sym_vals[i*ind_len:(i+1)*ind_len,:] = values
+        else:
+            for i, op in enumerate(sym_mats):
+                new_pts:np.ndarray = np.matmul(op, points.T).T
+                sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
+                sym_vals[i*ind_len:(i+1)*ind_len,:] = values
         # points overlap on at edges of each symmetric block, remove duplicates
         if unique:
             sym_pts, unique_inds = np.unique(sym_pts, return_index=True, axis=0)
@@ -227,33 +237,87 @@ class WFK():
     def SymWFKs(
         self, kpoint:np.ndarray, band:int=-1
     )->Generator[Self, None, None]:
-        kpoint = kpoint.reshape((1,3))
+        '''
+        Method for generating wavefunction planewave coefficients from coefficients of the irreducible BZ.
+
+        Parameters
+        ----------
+        kpoint : np.ndarray
+            A single reciprocal space point is provided to generate symmetrically equivalent coefficients.
+            Shape (1,3).
+        band : int
+            Choose which band to pull coefficients from (indexed starting from zero).
+            Default assumes coefficients from a single band are provided (-1).
+        '''
+        # helper functions for symmetrizing WFKs
+        #-----#
+        # function for calculating phase imparted by nonsymmorphic translation
+        def _FindPhase(
+            nonsymmvec:np.ndarray, g_vecs:np.ndarray, kpt:np.ndarray
+        )->np.ndarray:
+            if self.non_symm_vecs is np.zeros(1):
+                return np.ones(len(g_vecs))
+            elif np.sum(np.abs(nonsymmvec)) < 10**(-8):
+                return np.ones(len(g_vecs))
+            else:
+                return np.exp(-1j*np.dot((kpt+g_vecs), nonsymmvec.T))
+        #-----#
+        # function for finding symmetrically distinct k points
+        def _FindOrbit(
+            sym_kpts:np.ndarray
+        )->tuple[list,list]:
+            sym_kpts = np.round(sym_kpts, decimals=15)
+            _, unique_inds = np.unique(sym_kpts, return_index=True, axis=0)
+            # for each unique kpoint check original point is related by reciprocal lattice vector
+            dupes = []
+            for i, ind1 in enumerate(unique_inds):
+                if i in dupes:
+                    continue
+                for j, ind2 in enumerate(unique_inds):
+                    if i == j or j in dupes:
+                        continue
+                    diff = np.abs(sym_kpoints[ind1] - sym_kpoints[ind2])
+                    diff[diff < 10**(-12)] = 0.0
+                    diff[diff > 0.999] = 1.0
+                    mask = np.isin(diff, np.array([0.0,1.0]))
+                    if mask.all():
+                        dupes.append(j)
+            return dupes, unique_inds.tolist()
+        #-----#
+        # start SymWFks method
         # find symmetric kpoints
-        sym_kpoints, _ = self.Symmetrize(kpoint, unique=False)
-        sym_kpoints = np.round(sym_kpoints, decimals=15)
-        _, unique_inds = np.unique(sym_kpoints, return_index=True, axis=0)
-        # find symmetric plane wave indices
-        sym_pw_inds, _ = self.Symmetrize(self.pw_indices, unique=False)
+        kpoint = kpoint.reshape((1,3))
+        sym_kpoints, _ = self.Symmetrize(kpoint, unique=False, reciprocal=True)
+        dupes, unique_inds = _FindOrbit(sym_kpoints)
+        # find symmetric planewave indices
+        sym_pw_inds, _ = self.Symmetrize(self.pw_indices, unique=False, reciprocal=True)
         sym_pw_inds = sym_pw_inds.astype(int)
         ind_range = self.pw_indices.shape[0]
-        # for each unique kpoint check original point is related by reciprocal lattice vector
-        for ind in unique_inds:
-            diff = np.abs(kpoint - sym_kpoints[ind])
-            diff[diff < 10**(-12)] = 0.0
-            # if not related by reciprocal lattice vector return rotated functions
-            if not np.all(diff == 0.0) and np.all(diff < 0.999):
-                ind1 = ind*ind_range
-                ind2 = (ind+1)*ind_range
-                new_pw_inds = sym_pw_inds[ind1:ind2,:]
-                new_coeffs = copy(self)
-                new_coeffs.pw_indices = new_pw_inds
-                if band >= 0:
-                    new_coeffs.wfk_coeffs=self.wfk_coeffs[band]
-                    yield new_coeffs
-                else:
-                    new_coeffs.wfk_coeffs=self.wfk_coeffs
-                    yield new_coeffs
-    #-----------------------------------------------------------------------------------------------------------------#
+        # find reciprocal lattice shifts to move all points into BZ
+        bz = BZ(rec_latt=self.Real2Reciprocal())
+        shifts = bz.GetShifts(sym_kpoints)
+        # create WFK copies with new planewave indices
+        for i, ind in enumerate(unique_inds):
+            if i in dupes:
+                continue
+            ind1 = ind*ind_range
+            ind2 = (ind+1)*ind_range
+            new_pw_inds = sym_pw_inds[ind1:ind2,:]
+            new_pw_inds += shifts[ind,:]
+            new_coeffs = copy(self)
+            new_coeffs.pw_indices = new_pw_inds
+            phase_factor = _FindPhase(
+                    self.non_symm_vecs[ind],
+                    self.pw_indices,
+                    sym_kpoints[ind,:]
+            )
+            if band >= 0:
+                new_coeffs.wfk_coeffs = new_coeffs.wfk_coeffs[band] * phase_factor
+                yield new_coeffs
+            else:
+                new_coeffs.wfk_coeffs *= phase_factor
+                yield new_coeffs     
+#-----------------------------------------------------------------------------------------------------------------#
     # method for expanding a grid into XSF format
     def XSFFormat(
             self
@@ -264,7 +328,7 @@ class WFK():
         '''
         # append zeros to ends of all axes in grid_wfk
         # zeros get replaced by values at beginning of each axis
-        # this is repetition is required by XSF format
+        # this repetition is required by XSF format
         if np.shape(self.wfk_coeffs) != (self.ngfftz, self.ngfftx, self.ngffty):
             raise ValueError(
                 f'''Passed array is not the correct shape:
@@ -333,12 +397,12 @@ class WFK():
             self, xsf_file:str, _component:bool=True
     )->None:
         '''
-        A method for writing numpy grids to an XSF formatted file
+        A method for writing numpy grids to an XSF formatted file.
 
         Parameters
         ----------
         xsf_file : str
-            The file name
+            The file name.
         '''
         # first run writes out real part of eigenfunction to xsf
         if _component:
