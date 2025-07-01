@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial import Voronoi, KDTree, Delaunay
-import translate 
+from translate import TranslatePoints
 
 # Brillouin Zone object
 class BZ():
@@ -8,7 +8,7 @@ class BZ():
         self, rec_latt:np.ndarray
     )->None:
         self.rec_latt = rec_latt
-        _3xgrid, _ = translate.TranslatePoints(np.zeros((1,3)), np.zeros(1), self.rec_latt)
+        _3xgrid, _ = TranslatePoints(np.zeros((1,3)), np.zeros(1), self.rec_latt)
         self._3xgrid = _3xgrid
         self.vertices = self._BZpts()
 #---------------------------------------------------------------------------------------------------------------------#
@@ -98,14 +98,21 @@ class BZ():
         if cart:
             points = np.matmul(points, self.rec_latt)
         # find points outside of BZ
-        outside_pts = Delaunay(self.vertices).find_simplex(points)
+        outside_pts = self.OutsideBZ(points)
         # calculate shifts to move outside points back into BZ
         shifts = np.zeros((outside_pts[outside_pts < 0].shape[0],3))
         rec_grid = KDTree(self._3xgrid)
-        shift_grid, _ = translate.TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
+        shift_grid, _ = TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
         for i, pt in enumerate(points[outside_pts < 0]):
             _, closest_pt = rec_grid.query(pt, k=1)
             shifts[i,:] = shift_grid[closest_pt, :]
         all_shifts = np.zeros((points.shape[0],3))
         all_shifts[outside_pts < 0] = shifts
         return all_shifts.astype(int)
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for finding if points are outside of BZ
+    def OutsideBZ(
+        self, points:np.ndarray
+    )->np.ndarray:
+        outside_pts = Delaunay(self.vertices).find_simplex(points)
+        return outside_pts
