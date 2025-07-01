@@ -8,7 +8,7 @@ np.set_printoptions(threshold=sys.maxsize)
 
 class WFK():
     '''
-    A class manipulating wavefunctions from DFT calculations
+    A class for working with wavefunctions from DFT calculations
 
     Parameters
     ----------
@@ -335,7 +335,7 @@ class WFK():
             new_coeffs = copy(self)
             new_coeffs.pw_indices = new_pw_inds
             phase_factor = _FindPhase(
-                    self.non_symm_vecs[ind],
+                    self.non_symm_vecs[ind % len(self.non_symm_vecs)],
                     self.pw_indices,
                     sym_kpoints[ind,:]
             )
@@ -344,8 +344,17 @@ class WFK():
                 yield new_coeffs
             else:
                 new_coeffs.wfk_coeffs *= phase_factor
-                yield new_coeffs     
-#-----------------------------------------------------------------------------------------------------------------#
+                yield new_coeffs   
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method that returns BZ kpoints and eigenvalues
+    def GetBZPtsEigs(
+        self
+    )->tuple[np.ndarray,np.ndarray]:
+        bz = BZ(rec_latt=self.Real2Reciprocal())
+        bz_kpts, bz_eigs = self.Symmetrize(points=self.kpoints, values=self.eigenvalues, reciprocal=True)
+        bz_kpts -= bz.GetShifts(bz_kpts)
+        return bz_kpts, bz_eigs
+    #-----------------------------------------------------------------------------------------------------------------#
     # method for expanding a grid into XSF format
     def XSFFormat(
             self
