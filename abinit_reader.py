@@ -195,12 +195,33 @@ class Abinit7WFK():
     #-----------------------------------------------------------------------------------------------------------------#
     # method to read entire body of abinit version 7 wavefunction file
     def ReadWFK(
-        self
+        self, energy_level=np.nan, width=np.nan
     )->Generator[WFK, None, None]:
         '''
-        Method that constructs WFK objects from ABINIT v7 WFK file.
+        Method that constructs WFK objects from ABINIT v7 WFK file
+
+        Parameters
+        ----------
+        energy_level : float
+        The energy level to pull plane wave coefficients from
+        This is relative to the Fermi energy
+        If not defined but width is defined, default is 0 Hartree
+
+        width : float
+        Defines range about energy_level to search for plane wave coefficients
+        Total range is equal to width, so look width/2 above and below energy_level
+        If not defined but energy_level is defined, default is 0.005 Hartree
         '''
         wfk = open(self.filename, 'rb')
+        skip = True
+        if energy_level is np.nan:
+            if width is np.nan:
+                skip = False
+            else:
+                energy_level = 0
+        else:
+            if width is np.nan:
+                width = 0.005
         #-----------#
         # skip header
         wfk.read(298)
@@ -216,8 +237,6 @@ class Abinit7WFK():
                     print('\n', end='')
                 pw_indices:list[tuple] = []
                 eigenvalues:list[float] = []
-                occupancies:list[float] = []
-                coeffs:list[list[complex]] = []
                 wfk.read(4)
                 npw = bytes2int(wfk.read(4))
                 self.nspinor = bytes2int(wfk.read(4))
@@ -232,41 +251,77 @@ class Abinit7WFK():
                 for nband in range(nband_temp):
                     eigenval = bytes2float(wfk.read(8))
                     eigenvalues.append(eigenval)
-                for nband in range(nband_temp):
-                    occ = bytes2float(wfk.read(8))
-                    occupancies.append(occ)
-                wfk.read(4)
-                for nband in range(nband_temp):
-                    wfk.read(4)
-                    cg:list[complex] = []
-                    for pw in range(npw):
-                        cg1 = bytes2float(wfk.read(8))
-                        cg2 = bytes2float(wfk.read(8))
-                        cg.append(cg1 + 1j*cg2)
-                    coeffs.append(cg)
-                    wfk.read(4)       
-                yield WFK(
-                    eigenvalues=np.array(eigenvalues), 
-                    wfk_coeffs=np.array(coeffs),
-                    pw_indices=np.array(pw_indices),
-                    kpoints=np.array(self.kpts),
-                    nkpt=self.nkpt,
-                    nbands=self.bands[0],
-                    ngfftx=self.ngfftx,
-                    ngffty=self.ngffty,
-                    ngfftz=self.ngfftz,
-                    symrel=np.array(self.symrel),
-                    nsym=self.nsym,
-                    lattice=self.real_lattice,
-                    natom=self.natom,
-                    xred=np.array(self.xred),
-                    typat=self.typat,
-                    znucltypat=self.znucltypat,
-                    fermi_energy=self.fermi,
-                    non_symm_vecs=np.array(self.tnons)
-                )
+                # skip reading coefficients if they energy level of interest is not in band
+                if skip:
+                    min_val = self.fermi + energy_level - width/2
+                    max_val = self.fermi + energy_level + width/2
+                    eig_found = False
+                    for eigval in eigenvalues:
+                        if min_val <= eigval <= max_val:
+                            eig_found = True
+                            break
+                    if eig_found:
+                        yield self._ReadCoeffs(
+                            wfk,
+                            nband_temp,
+                            npw,
+                            eigenvalues,
+                            pw_indices
+                        )
+                    else:
+                        wfk.read(nband_temp*8)
+                        wfk.read(4)
+                        wfk.read(nband_temp*(8 + npw*16))
+                else:
+                    yield self._ReadCoeffs(
+                        wfk,
+                        nband_temp,
+                        npw,
+                        eigenvalues,
+                        pw_indices
+                    )
         print('WFK body read')
         wfk.close()
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method to read in plane wave coefficients
+    def _ReadCoeffs(
+        self, wfk_file, nbands, npws, eigs, pw_inds
+    )->WFK:
+        occupancies = np.zeros((1,nbands), dtype=float)
+        coeffs = np.zeros((nbands,npws), dtype=complex)
+        for nband in range(nbands):
+            occ = bytes2float(wfk_file.read(8))
+            occupancies[:,nband] = occ
+        wfk_file.read(4)
+        for nband in range(nbands):
+            wfk_file.read(4)
+            cg:np.ndarray = np.zeros((1,npws), dtype=complex)
+            for pw in range(npws):
+                cg1 = bytes2float(wfk_file.read(8))
+                cg2 = bytes2float(wfk_file.read(8))
+                cg[:,pw] = cg1 + 1j*cg2
+            coeffs[nband,:] = cg
+            wfk_file.read(4) 
+        return WFK(
+            eigenvalues=np.array(eigs), 
+            wfk_coeffs=np.array(coeffs),
+            pw_indices=np.array(pw_inds),
+            kpoints=np.array(self.kpts),
+            nkpt=self.nkpt,
+            nbands=self.bands[0],
+            ngfftx=self.ngfftx,
+            ngffty=self.ngffty,
+            ngfftz=self.ngfftz,
+            symrel=np.array(self.symrel),
+            nsym=self.nsym,
+            lattice=self.real_lattice,
+            natom=self.natom,
+            xred=np.array(self.xred),
+            typat=self.typat,
+            znucltypat=self.znucltypat,
+            fermi_energy=self.fermi,
+            non_symm_vecs=np.array(self.tnons)
+        )
     #-----------------------------------------------------------------------------------------------------------------#
     # method to read only eigenvalues from body of abinit version 7 wavefunction file
     def ReadEigenvalues(
@@ -593,12 +648,33 @@ class Abinit10WFK():
     #-----------------------------------------------------------------------------------------------------------------#
     # method to read entire body of abinit version 7 wavefunction file
     def ReadWFK(
-        self
+        self, energy_level=np.nan, width=np.nan
     )->Generator[WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v10 WFK file.
+
+        Parameters
+        ----------
+        energy_level : float
+        The energy level to pull plane wave coefficients from
+        This is relative to the Fermi energy
+        If not defined but width is defined, default is 0 Hartree
+
+        width : float
+        Defines range about energy_level to search for plane wave coefficients
+        Total range is equal to width, so look width/2 above and below energy_level
+        If not defined but energy_level is defined, default is 0.005 Hartree
         '''
         wfk = open(self.filename, 'rb')
+        skip = True
+        if energy_level is np.nan:
+            if width is np.nan:
+                skip = False
+            else:
+                energy_level = 0
+        else:
+            if width is np.nan:
+                width = 0.005
         #-----------#
         # skip header
         wfk.read(468)
@@ -632,61 +708,96 @@ class Abinit10WFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                pw_indices:list[tuple] = []
-                eigenvalues:list[float] = []
-                occupancies:list[float] = []
-                coeffs:list[list[complex]] = []
                 wfk.read(4)
                 npw = bytes2int(wfk.read(4))
                 self.nspinor = bytes2int(wfk.read(4))
                 nband_temp = bytes2int(wfk.read(4))
+                pw_indices = np.zeros((npw,3), dtype=int)
+                eigenvalues = np.zeros(nband_temp, dtype=float)
                 wfk.read(8)
                 for pw in range(npw):
                     kx = bytes2int(wfk.read(4))
                     ky = bytes2int(wfk.read(4))
                     kz = bytes2int(wfk.read(4))
-                    pw_indices.append((kx, ky, kz))
+                    pw_indices[pw,:] = [kx, ky, kz]
                 wfk.read(8)
                 for nband in range(nband_temp):
                     eigenval = bytes2float(wfk.read(8))
-                    eigenvalues.append(eigenval)
-                for nband in range(nband_temp):
-                    occ = bytes2float(wfk.read(8))
-                    occupancies.append(occ)
-                wfk.read(4)
-                for nband in range(nband_temp):
-                    wfk.read(4)
-                    cg:list[complex] = []
-                    for pw in range(npw):
-                        cg1 = bytes2float(wfk.read(8))
-                        cg2 = bytes2float(wfk.read(8))
-                        cg.append(cg1 + 1j*cg2)
-                    coeffs.append(cg)
-                    wfk.read(4) 
-                yield WFK(
-                    eigenvalues=np.array(eigenvalues), 
-                    wfk_coeffs=np.array(coeffs),
-                    pw_indices=np.array(pw_indices),
-                    kpoints=np.array(self.kpts),
-                    nkpt=self.nkpt,
-                    nbands=self.bands[0],
-                    ngfftx=self.ngfftx,
-                    ngffty=self.ngffty,
-                    ngfftz=self.ngfftz,
-                    symrel=np.array(self.symrel),
-                    nsym=self.nsym,
-                    lattice=self.real_lattice,
-                    natom=self.natom,
-                    xred=np.array(self.xred),
-                    typat=self.typat,
-                    znucltypat=self.znucltypat,
-                    fermi_energy=self.fermi,
-                    non_symm_vecs=np.array(self.tnons)
-                )
+                    eigenvalues[nband] = eigenval
+                # skip reading coefficients if they energy level of interest is not in band
+                if skip:
+                    min_val = self.fermi + energy_level - width/2
+                    max_val = self.fermi + energy_level + width/2
+                    eig_found = False
+                    for eigval in eigenvalues:
+                        if min_val <= eigval <= max_val:
+                            eig_found = True
+                            break
+                    if eig_found:
+                        yield self._ReadCoeffs(
+                            wfk,
+                            nband_temp,
+                            npw,
+                            eigenvalues,
+                            pw_indices
+                        )
+                    else:
+                        wfk.read(nband_temp*8)
+                        wfk.read(4)
+                        wfk.read(nband_temp*(8 + npw*16))
+                # if not skip, read full wavefunction
+                else:
+                    yield self._ReadCoeffs(
+                        wfk,
+                        nband_temp,
+                        npw,
+                        eigenvalues,
+                        pw_indices
+                    )
         print('WFK body read')
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
-    # method to read only eigenvalues from body of abinit version 7 wavefunction file
+    # method to read in plane wave coefficients
+    def _ReadCoeffs(
+        self, wfk_file, nbands, npws, eigs, pw_inds
+    )->WFK:
+        occupancies = np.zeros((1,nbands), dtype=float)
+        coeffs = np.zeros((nbands,npws), dtype=complex)
+        for nband in range(nbands):
+            occ = bytes2float(wfk_file.read(8))
+            occupancies[:,nband] = occ
+        wfk_file.read(4)
+        for nband in range(nbands):
+            wfk_file.read(4)
+            cg:np.ndarray = np.zeros((1,npws), dtype=complex)
+            for pw in range(npws):
+                cg1 = bytes2float(wfk_file.read(8))
+                cg2 = bytes2float(wfk_file.read(8))
+                cg[:,pw] = cg1 + 1j*cg2
+            coeffs[nband,:] = cg
+            wfk_file.read(4) 
+        return WFK(
+            eigenvalues=np.array(eigs), 
+            wfk_coeffs=np.array(coeffs),
+            pw_indices=np.array(pw_inds),
+            kpoints=np.array(self.kpts),
+            nkpt=self.nkpt,
+            nbands=self.bands[0],
+            ngfftx=self.ngfftx,
+            ngffty=self.ngffty,
+            ngfftz=self.ngfftz,
+            symrel=np.array(self.symrel),
+            nsym=self.nsym,
+            lattice=self.real_lattice,
+            natom=self.natom,
+            xred=np.array(self.xred),
+            typat=self.typat,
+            znucltypat=self.znucltypat,
+            fermi_energy=self.fermi,
+            non_symm_vecs=np.array(self.tnons)
+        )
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method to read only eigenvalues from body of abinit version 10 wavefunction file
     def ReadEigenvalues(
         self
     )->Generator[WFK, None, None]:
@@ -727,11 +838,11 @@ class Abinit10WFK():
                 print(f'Reading kpoint {j+1} of {self.nkpt}', end='\r')
                 if j+1 == self.nkpt:
                     print('\n', end='')
-                eigenvalues:list[float] = []
                 wfk.read(4)
                 npw = bytes2int(wfk.read(4))
                 self.nspinor = bytes2int(wfk.read(4))
                 nband_temp = bytes2int(wfk.read(4))
+                eigenvalues = np.zeros((1,nband_temp), dtype=float)
                 wfk.read(8)
                 wfk.read(12*npw)
                 wfk.read(8)
@@ -739,7 +850,7 @@ class Abinit10WFK():
                 # only need eigenvalues for Fermi surface, skip over everything else
                 for nband in range(nband_temp):
                     eigenval = bytes2float(wfk.read(8))
-                    eigenvalues.append(eigenval)   
+                    eigenvalues[nband] = eigenval
                 wfk.read(nband_temp*8)
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
