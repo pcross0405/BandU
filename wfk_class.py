@@ -187,6 +187,53 @@ class WFK():
         b3 = 2*np.pi*(np.cross(a,b))/vol
         return np.array([b1,b2,b3]).reshape((3,3))
     #-----------------------------------------------------------------------------------------------------------------#
+    # method for checking for time reversal symmetry
+    def _CheckTimeRevSym(
+        self
+    ):
+        if self.time_reversal:
+            # if system is centrosymmetric, do not double reciprocal symmetry operations
+            if -3.0 in [np.trace(mat) for mat in self.symrel]:
+                self.time_reversal = False
+            else:
+                print((
+                'Noncentrosymmetric system identified, assuming time reversal symmetry\n'
+                'To change this, set time_reversal attribute to False'
+                ))
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for finding symmetrically distinct k points
+    def _FindOrbit(
+        self, sym_kpts:np.ndarray
+    )->tuple[list,list]:
+        sym_kpts = np.round(sym_kpts, decimals=15)
+        _, unique_inds = np.unique(sym_kpts, return_index=True, axis=0)
+        # for each unique kpoint check original point is related by reciprocal lattice vector
+        dupes = []
+        for i, ind1 in enumerate(unique_inds):
+            if i in dupes:
+                continue
+            for j, ind2 in enumerate(unique_inds):
+                if i == j or j in dupes:
+                    continue
+                diff = np.abs(sym_kpts[ind1] - sym_kpts[ind2])
+                diff[diff < 10**(-12)] = 0.0
+                diff[diff > 0.999] = 1.0
+                mask = np.isin(diff, np.array([0.0,1.0]))
+                if mask.all():
+                    dupes.append(j)
+        return dupes, unique_inds.tolist()
+    #-----------------------------------------------------------------------------------------------------------------#
+    # function for calculating phase imparted by nonsymmorphic translation
+    def _FindPhase(
+        self, nonsymmvec:np.ndarray, g_vecs:np.ndarray, kpt:np.ndarray
+    )->np.ndarray:
+        if self.non_symm_vecs is np.zeros(1):
+            return np.ones(len(g_vecs))
+        elif np.sum(np.abs(nonsymmvec)) < 10**(-8):
+            return np.ones(len(g_vecs))
+        else:
+            return np.exp(-1j*np.dot((kpt+g_vecs), nonsymmvec.T))
+    #-----------------------------------------------------------------------------------------------------------------#
     # method for creating symmetrically equivalent points
     def Symmetrize(
             self, points:np.ndarray, values:np.ndarray=np.empty([]), unique:bool=True, reciprocal:bool=False,
@@ -213,21 +260,13 @@ class WFK():
             Use inverse symmetry operations.
             Default applies forwards operation (False).
         '''
-        # check if system is noncentrosymmetric
-        if self.time_reversal:
-            # if system is centrosymmetric, do not double reciprocal symmetry operations
-            if -3.0 in [np.trace(mat) for mat in self.symrel]:
-                self.time_reversal = False
-            else:
-                print((
-                'Noncentrosymmetric system identified, assuming time reversal symmetry\n'
-                'To change this, set time_reversal attribute to False'
-                ))
         # check if reciprocal or real space symmetries will be used
         sym_num = self.nsym
         if reciprocal:
+            # nosymmorphic translations do not apply to reciprocal space
             tnons = False
             sym_mats = [np.linalg.inv(mat).T for mat in self.symrel]
+            # time reversal only adds to reciprocal space symmetries
             if self.time_reversal:
                 sym_mats = np.concatenate((sym_mats, [-mat for mat in sym_mats]), axis=0)
                 sym_num *= 2
@@ -277,46 +316,12 @@ class WFK():
             Choose which band to pull coefficients from (indexed starting from zero).
             Default assumes coefficients from a single band are provided (-1).
         '''
-        # helper functions for symmetrizing WFKs
-        #-----#
-        # function for calculating phase imparted by nonsymmorphic translation
-        def _FindPhase(
-            nonsymmvec:np.ndarray, g_vecs:np.ndarray, kpt:np.ndarray
-        )->np.ndarray:
-            if self.non_symm_vecs is np.zeros(1):
-                return np.ones(len(g_vecs))
-            elif np.sum(np.abs(nonsymmvec)) < 10**(-8):
-                return np.ones(len(g_vecs))
-            else:
-                return np.exp(-1j*np.dot((kpt+g_vecs), nonsymmvec.T))
-        #-----#
-        # function for finding symmetrically distinct k points
-        def _FindOrbit(
-            sym_kpts:np.ndarray
-        )->tuple[list,list]:
-            sym_kpts = np.round(sym_kpts, decimals=15)
-            _, unique_inds = np.unique(sym_kpts, return_index=True, axis=0)
-            # for each unique kpoint check original point is related by reciprocal lattice vector
-            dupes = []
-            for i, ind1 in enumerate(unique_inds):
-                if i in dupes:
-                    continue
-                for j, ind2 in enumerate(unique_inds):
-                    if i == j or j in dupes:
-                        continue
-                    diff = np.abs(sym_kpoints[ind1] - sym_kpoints[ind2])
-                    diff[diff < 10**(-12)] = 0.0
-                    diff[diff > 0.999] = 1.0
-                    mask = np.isin(diff, np.array([0.0,1.0]))
-                    if mask.all():
-                        dupes.append(j)
-            return dupes, unique_inds.tolist()
-        #-----#
-        # start SymWFks method
+        # first check for time reversal symmetry
+        self._CheckTimeRevSym()
         # find symmetric kpoints
         kpoint = kpoint.reshape((1,3))
         sym_kpoints, _ = self.Symmetrize(kpoint, unique=False, reciprocal=True)
-        dupes, unique_inds = _FindOrbit(sym_kpoints)
+        dupes, unique_inds = self._FindOrbit(sym_kpoints)
         # find symmetric planewave indices
         sym_pw_inds, _ = self.Symmetrize(self.pw_indices, unique=False, reciprocal=True)
         sym_pw_inds = sym_pw_inds.astype(int)
@@ -334,10 +339,10 @@ class WFK():
             new_pw_inds += shifts[ind,:]
             new_coeffs = copy(self)
             new_coeffs.pw_indices = new_pw_inds
-            phase_factor = _FindPhase(
-                    self.non_symm_vecs[ind % len(self.non_symm_vecs)],
-                    self.pw_indices,
-                    sym_kpoints[ind,:]
+            phase_factor = self._FindPhase(
+                self.non_symm_vecs[ind % len(self.non_symm_vecs)],
+                self.pw_indices,
+                sym_kpoints[ind,:]
             )
             if band >= 0:
                 new_coeffs.wfk_coeffs = new_coeffs.wfk_coeffs[band] * phase_factor
