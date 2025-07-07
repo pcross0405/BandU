@@ -266,7 +266,8 @@ class Abinit7WFK():
                             nband_temp,
                             npw,
                             eigenvalues,
-                            pw_indices
+                            pw_indices,
+                            ind=j
                         )
                     else:
                         wfk.read(nband_temp*8)
@@ -278,14 +279,15 @@ class Abinit7WFK():
                         nband_temp,
                         npw,
                         eigenvalues,
-                        pw_indices
+                        pw_indices,
+                        ind=j
                     )
         print('WFK body read')
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
     # method to read in plane wave coefficients
     def _ReadCoeffs(
-        self, wfk_file, nbands, npws, eigs, pw_inds
+        self, wfk_file, nbands, npws, eigs, pw_inds, ind
     )->WFK:
         occupancies = np.zeros((1,nbands), dtype=float)
         coeffs = np.zeros((nbands,npws), dtype=complex)
@@ -306,7 +308,7 @@ class Abinit7WFK():
             eigenvalues=np.array(eigs), 
             wfk_coeffs=np.array(coeffs),
             pw_indices=np.array(pw_inds),
-            kpoints=np.array(self.kpts),
+            kpoints=np.array(self.kpts[ind]),
             nkpt=self.nkpt,
             nbands=self.bands[0],
             ngfftx=self.ngfftx,
@@ -362,7 +364,7 @@ class Abinit7WFK():
                 wfk.read(nband_temp*(8 + npw*16))
                 yield WFK(
                     eigenvalues=np.array(eigenvalues), 
-                    kpoints=np.array(self.kpts),
+                    kpoints=np.array(self.kpts[j]),
                     nkpt=self.nkpt,
                     nbands=self.bands[0],
                     ngfftx=self.ngfftx,
@@ -739,7 +741,8 @@ class Abinit10WFK():
                             nband_temp,
                             npw,
                             eigenvalues,
-                            pw_indices
+                            pw_indices,
+                            ind=j
                         )
                     else:
                         wfk.read(nband_temp*8)
@@ -752,14 +755,15 @@ class Abinit10WFK():
                         nband_temp,
                         npw,
                         eigenvalues,
-                        pw_indices
+                        pw_indices,
+                        ind=j
                     )
         print('WFK body read')
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
     # method to read in plane wave coefficients
     def _ReadCoeffs(
-        self, wfk_file, nbands, npws, eigs, pw_inds
+        self, wfk_file, nbands, npws, eigs, pw_inds, ind
     )->WFK:
         occupancies = np.zeros((1,nbands), dtype=float)
         coeffs = np.zeros((nbands,npws), dtype=complex)
@@ -780,7 +784,7 @@ class Abinit10WFK():
             eigenvalues=np.array(eigs), 
             wfk_coeffs=np.array(coeffs),
             pw_indices=np.array(pw_inds),
-            kpoints=np.array(self.kpts),
+            kpoints=np.array(self.kpts[ind]),
             nkpt=self.nkpt,
             nbands=self.bands[0],
             ngfftx=self.ngfftx,
@@ -856,7 +860,7 @@ class Abinit10WFK():
                 wfk.read(nband_temp*(8 + npw*16))
                 yield WFK(
                     eigenvalues=np.array(eigenvalues), 
-                    kpoints=np.array(self.kpts),
+                    kpoints=np.array(self.kpts[j]),
                     nkpt=self.nkpt,
                     nbands=self.bands[0],
                     ngfftx=self.ngfftx,
