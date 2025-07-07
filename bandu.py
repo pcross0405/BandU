@@ -1,11 +1,13 @@
 import numpy as np
 from typing import Generator
 from wfk_class import WFK
+from copy import copy
+import pickle as pkl
 
 class BandU():
     def __init__(
         self, wfks:Generator, energy_level:float, width:float, grid:bool=True, fft:bool=True, norm:bool=True,
-        sym:bool=True
+        sym:bool=True, low_mem:bool=False
     )->None:
         '''
         BandU object with methods for finding states and computing BandU functions from states.
@@ -28,199 +30,153 @@ class BandU():
         norm : bool
             Determines whether or not wavefunction coefficients are normalized.
             Default normalizes coefficients (True)
+        low_mem : bool
+            Run the program on a lower memory setting
+            The low_mem tag will print plane wave cofficients to a Python pickle to read from disk later.
+            Default does not run in low memory mode (False)
         '''
         self.grid:bool=grid
         self.fft:bool=fft
         self.norm:bool=norm
         self.sym:bool=sym
+        self.low_mem:bool=low_mem
         self.total_states:int=0
-        self.bandu_fxns:np.ndarray
-        self.ngfftx:int
-        self.ngffty:int
-        self.ngfftz:int
-        self.fermi_energy:float
-        self.lattice:np.ndarray
-        self.natom:int
-        self.xred:np.ndarray
-        self.typat:list[int]
-        self.znucltypat:list[float]
-        # apply grid, fourier transform, and normalize functions if necessary
-        self._Process(
-            # find all states within width
-            self._FindStates(energy_level, width, wfks)
-        )
-        # find overlap of states and diagonalize
-        principal_vals, principal_vecs = self._PrincipalComponents()
-        # linear combination of states weighted by principal components
-        self.bandu_fxns = np.matmul(principal_vecs, self.bandu_fxns)
+        self.bandu_fxns:list[WFK]=[]
+        # find all states within width
+        self._FindStates(energy_level, width, wfks)
+        print(f'{self.total_states} states found within specified energy range')
+        # construct principal orbital components
+        principal_vals = self._PrincipalComponents()
         # normalize bandu functions
         for i in range(self.total_states):
-            normal_coeffs = WFK(wfk_coeffs=self.bandu_fxns[i,:]).Normalize()
-            self.bandu_fxns[i,:] = normal_coeffs.wfk_coeffs
+            self.bandu_fxns[i] = self.bandu_fxns[i].Normalize()
+        # compute ratios
+        omega_vals = self._GetOmega()
         # write output file
+        fermi = self.bandu_fxns[0].fermi_energy
         with open('eigenvalues.out', 'w') as f:
             print(f'Width: {width}, total states: {self.total_states}', file=f)
-            print(f'Energy level: {energy_level+self.fermi_energy}, Fermi energy: {self.fermi_energy}', file=f)
-            print(np.abs(principal_vals), file=f)            
+            print(f'Energy level: {energy_level+fermi}, Fermi energy: {fermi}', file=f)
+            print(np.abs(principal_vals), file=f)   
+            print('Omega Values', file=f)
+            print(omega_vals, file=f)         
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
     def _FindStates(
-        self, energy_level:float, width:float, wfks:Generator
-    )->list[WFK]:
-        # list of WFK coefficients within specified range
-        found_fxns = []
-        # state will be a WFK type
-        state:WFK
-        # variable for getting info during first iteration
-        first_iter = True
+        self, energy_level:float, width:float, wfks:Generator[WFK,None,None]
+    ):
         # loop through every state
         for i, state in enumerate(wfks):
-            # pick necessary attributes for XSF writing
-            if first_iter:
-                self.ngfftx = state.ngfftx
-                self.ngffty = state.ngffty
-                self.ngfftz = state.ngfftz
-                self.lattice = state.lattice
-                self.natom = state.natom
-                self.typat = state.typat
-                self.znucltypat = state.znucltypat
-                self.xred = state.xred
-                self.fermi_energy = state.fermi_energy
-                energy_level += self.fermi_energy
-                first_iter = False
             # check if state has a band that crosses the width
+            min_en = state.fermi_energy + energy_level - width/2
+            max_en = state.fermi_energy + energy_level + width/2
             for j, band in enumerate(state.eigenvalues):
-                if energy_level - width/2 <= band <= energy_level + width/2:
-                    # convert state to real space and add to u_vec list
-                    coeffs = WFK(
-                        wfk_coeffs=np.array(state.wfk_coeffs[j], dtype=complex),
-                        pw_indices=np.array(state.pw_indices, dtype=int),
-                        ngfftx=self.ngfftx,
-                        ngffty=self.ngffty,
-                        ngfftz=self.ngfftz,
-                        kpoints=state.kpoints[i],
-                        nsym=state.nsym,
-                        symrel=state.symrel,
-                        non_symm_vecs=state.non_symm_vecs,
-                        lattice=self.lattice,
-                        xred=self.xred,
-                        znucltypat=self.znucltypat,
-                        typat=self.typat,
-                        natom=self.natom
-                    )
-                    found_fxns.append(coeffs)
-        if found_fxns is []:
+                if min_en <= band <= max_en:
+                    self.total_states += 1
+                    coeffs = copy(state)
+                    coeffs.wfk_coeffs = coeffs.wfk_coeffs[j]
+                    coeffs.kpoints = coeffs.kpoints[i]
+                    for wfk in self._Process(coeffs):
+                        self.bandu_fxns.append(wfk)
+        if self.bandu_fxns is []:
             raise ValueError(
             '''Identified 0 states within provided width.
             Action: Increase width or increase fineness of kpoint grid.
             ''')
-        else:
-            return found_fxns
     #-----------------------------------------------------------------------------------------------------------------#
     # method for processing planewave coefficient data from FindStates
     def _Process(
-            self, found_fxns:list[WFK]
-    )->None:
-        funcs = []
+            self, state:WFK
+    )->Generator[WFK,None,None]:
+        funcs:list[WFK] = []
+        # generate symmetrically equivalent coefficients
         if self.sym:
-            for coeffs in found_fxns:
-                for sym_coeffs in coeffs.SymWFKs(kpoint=coeffs.kpoints):
-                    self.total_states += 1
-                    funcs.append(sym_coeffs)
+            for sym_coeffs in state.SymWFKs(kpoint=state.kpoints):
+                self.total_states += 1
+                funcs.append(sym_coeffs)
+            self.total_states -= 1
         else:
-            self.total_states = len(found_fxns)
-            funcs = found_fxns
-        del found_fxns
-        if self.grid:
-            for i, coeffs in enumerate(funcs):
-                funcs[i] = coeffs.GridWFK()
-        if self.fft:
-            for i, coeffs in enumerate(funcs):
-                funcs[i] = coeffs.FFT()
-        if self.norm:
-            for i, coeffs in enumerate(funcs):
-                funcs[i] = coeffs.Normalize()
-        funcs = [state.wfk_coeffs for state in funcs]
-        funcs = np.array(funcs, dtype=complex).reshape(self.total_states, self.ngfftx*self.ngffty*self.ngfftz)
-        print(f'{self.total_states} states found within specified range.')
-        self.bandu_fxns = funcs
+            funcs.append(state)
+        # apply desired transformations
+        for wfk in funcs:
+            if self.grid:
+                wfk = wfk.GridWFK()
+            if self.fft:
+                wfk = wfk.FFT()
+            if self.norm:
+                wfk = wfk.Normalize()
+            yield wfk
     #-----------------------------------------------------------------------------------------------------------------#
     # find principal components
     def _PrincipalComponents(
         self
-    )->tuple[np.ndarray, np.ndarray]:
+    )->np.ndarray:
+        # organize wfk coefficients 
+        x = self.bandu_fxns[0].ngfftx
+        y = self.bandu_fxns[0].ngffty
+        z = self.bandu_fxns[0].ngfftz
+        mat = np.zeros((self.total_states,x*y*z), dtype=complex)
+        for i in range(self.total_states):
+            mat[i,:] = self.bandu_fxns[i].wfk_coeffs.reshape((1,x*y*z))
         # compute overlap matrix
         print('Computing overlap matrix')
-        overlap_mat = np.matmul(np.conj(self.bandu_fxns), self.bandu_fxns.T)
+        overlap_mat = np.matmul(np.conj(mat), mat.T)
         # diagonlize matrix
         principal_vals, principal_vecs = np.linalg.eig(overlap_mat)
+        principal_vecs = principal_vecs.T
         # organize eigenvectors and eigenvalues
         sorted_inds = np.flip(principal_vals.argsort())
-        principal_vecs = principal_vecs.T
         principal_vals = np.take(principal_vals, sorted_inds)
         principal_vecs = np.take(principal_vecs, sorted_inds, axis=0)
-        return principal_vals, principal_vecs
+        mat = np.matmul(principal_vecs, mat)
+        for i in range(self.total_states):
+            self.bandu_fxns[i].wfk_coeffs = mat[i,:]
+            self.bandu_fxns[i].wfk_coeffs *= np.exp(1j*np.pi/4)
+        return principal_vals 
+    #-----------------------------------------------------------------------------------------------------------------#
+    # find ratio of real and imaginary components
+    def _GetOmega(
+        self
+    )->np.ndarray:
+        omega_vals = np.zeros(self.total_states, dtype=float)
+        for i in range(self.total_states):
+            coeffs = self.bandu_fxns[i].wfk_coeffs
+            coeffs *= np.exp(1j*2*np.pi)
+            omega = np.sum(coeffs.real*coeffs)/np.sum(coeffs.imag*coeffs)
+            omega = np.abs(omega)
+            omega_vals[i] = omega
+        return omega_vals
     #-----------------------------------------------------------------------------------------------------------------#
     # make xsf of BandU functions
-    def MakeXSF(
-        self, function_number:list, xsf_file:str
-    )->None:
-        '''
-        Method for writing Band-U function as XSF file.
-
-        Parameters
-        ----------
-        function_number : list
-            Defines range of Band-U functions that will be printed.\n
-            List should have only 2 elements.\n
-            First being the first Band-U function to be printed.\n
-            Second being the function number to be printed up to.
-        xsf_file : str
-            Root name given to all XSF files that are printed.
-        '''
-        # check if list has only 2 elements
-        if len(function_number) != 2:
-            raise ValueError(f'function_number should contain two values, {len(function_number)} were received.')
-        # check if function number is within defined range
-        if function_number[0] < 1:
-            print('First element of function_number cannot be lower than 1, changing to 1 now.')
-            function_number[0] = 1
-        # update function number list if it exceeds maximum number of bandu functions
-        if function_number[1] > self.bandu_fxns.shape[0]:
-            print(f'Printing up to max Band-U function number: {self.bandu_fxns.shape[0]}')
-            function_number[1] = self.bandu_fxns.shape[0]
-        # check if lower limit is within defined range
-        if function_number[0] > self.bandu_fxns.shape[0]:
-            count = self.bandu_fxns.shape[0]
+    def ToXSF(
+        self, nums:list[int]=[], xsf_name:str='Principal_orbital_component'
+    ):
+        if nums is []:
+            nums = [0,self.total_states-1]
         else:
-            count = function_number[0]
-        print(f'Writing XSF files for Band-U functions {function_number[0]} through {function_number[1]}.')
-        # loop over range and print XSF files
-        while count <= function_number[1]:
-            # fetch nth bandu function coefficients
-            bandu_fxn = self.bandu_fxns[function_number[0]+count-2,:]
-            # grid coefficients into 3D numpy array
-            bandu_fxn = bandu_fxn.reshape((self.ngfftz, self.ngfftx, self.ngffty))
-            # create WFK object from coefficients and provided attributes
-            bandu_fxn = WFK(
-                wfk_coeffs=bandu_fxn, 
-                lattice=self.lattice,
-                natom=self.natom,
-                xred=self.xred,
-                typat=self.typat,
-                znucltypat=self.znucltypat,
-                ngfftx=self.ngfftx,
-                ngffty=self.ngffty,
-                ngfftz=self.ngfftz
-            )
-            # normalize
-            bandu_fxn = bandu_fxn.Normalize()
-            # convert to XSF format
-            bandu_fxn = bandu_fxn.XSFFormat()
-            # print out XSF file
-            xsf_name = xsf_file + f'_{function_number[0]+count-1}'
-            bandu_fxn.WriteXSF(xsf_file=xsf_name)
-            # update count and move to next bandu function
-            count += 1
+            # check if list has only 2 elements
+            if len(nums) != 2:
+                raise ValueError(f'nums should contain two values, {len(nums)} were received.')
+            # check if function number is within defined range
+            if nums[0] < 1:
+                print('First element of nums cannot be lower than 1, changing to 1 now.')
+                nums[0] = 1
+            # update function number list if it exceeds maximum number of bandu functions
+            if nums[1] > self.total_states:
+                print(f'Printing up to max Band-U function number: {self.total_states}')
+                nums[1] = self.total_states
+            # check if lower limit is within defined range
+            if nums[0] > nums[1]:
+                nums[0] = nums[1]
+        print(f'Writing XSF files for Band-U functions {nums[0]} through {nums[1]}.')
+        # write xsf files
+        x = self.bandu_fxns[0].ngfftx
+        y = self.bandu_fxns[0].ngffty
+        z = self.bandu_fxns[0].ngfftz
+        for i in range(nums[0]-1, nums[1]):
+            file_name = xsf_name + f'_{i+1}'
+            wfk = copy(self.bandu_fxns[i])
+            wfk.wfk_coeffs = wfk.wfk_coeffs.reshape((z,x,y))
+            wfk.WriteXSF(xsf_file=file_name)
