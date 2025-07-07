@@ -20,13 +20,11 @@ class BZ():
     )->bool:
         # get cartesian coordinates
         verts = np.take(verts, pts, axis=0)
+        # rounding avoids floating point errors in if comparison below
+        verts = np.round(verts, decimals=8)
         # last point is the furthest, check if it is in same plane as other points
         pt = verts[-1,:]
         check = False
-        # truncate floats to avoid floating point errors when checking for equivalence
-        pt = [np.sign(n)*float(str(np.abs(n))[:8]) for n in pt]
-        for i, vert in enumerate(verts):
-            verts[i,:] = [np.sign(n)*float(str(np.abs(n))[:8]) for n in vert]
         # check if points are in same plane
         if pt[0] == verts[0,:][0] and pt[0] == verts[1,:][0] and pt[0] == verts[2,:][0]:
             check = True 
@@ -96,9 +94,9 @@ class BZ():
             points = points.reshape((1,points.shape[0]))
         # convert to cartesian
         if cart:
-            points = np.matmul(points, self.rec_latt)
+            points = self.MakeCart(points=points)
         # find points outside of BZ
-        outside_pts = self.OutsideBZ(points)
+        outside_pts = self.PointLocate(points)
         # calculate shifts to move outside points back into BZ
         shifts = np.zeros((outside_pts[outside_pts < 0].shape[0],3))
         rec_grid = KDTree(self._3xgrid)
@@ -111,8 +109,70 @@ class BZ():
         return all_shifts.astype(int)
     #-----------------------------------------------------------------------------------------------------------------#
     # method for finding if points are outside of BZ
-    def OutsideBZ(
-        self, points:np.ndarray
+    def PointLocate(
+        self, points:np.ndarray, cart:bool=True
     )->np.ndarray:
+        '''
+        Method for finding which points are outside, on the edge, and inside the Brillouin Zone.
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Array of points to be checked against the Brillouin Zone, must be in cartesian format
+            Shape (N,3)
+
+        Returns
+        -------
+        np.ndarray
+        elements < 0 correspond to points outside the Brillouin Zone
+        elements = 0 correspond to points on the edge 
+        elements > 0 correspond to points inside
+        '''
+        if cart:
+            points = self.MakeCart(points=points)
         outside_pts = Delaunay(self.vertices).find_simplex(points)
         return outside_pts
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for converting points to cartesian format
+    def MakeCart(
+        self, points:np.ndarray
+    )->np.ndarray:
+        '''
+        Method for converting points from reduced to cartesian format
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Array of points to be converted
+            Shape (N,3)
+
+        Returns
+        -------
+        np.ndarray
+        points in cartesian format
+        Shape (N,3)
+        '''
+        cart_pts = np.matmul(points, self.rec_latt)
+        return cart_pts
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for converting points to reduced format
+    def MakeRed(
+        self, points:np.ndarray
+    )->np.ndarray:
+        '''
+        Method for converting points from cartesian to reduced format
+
+        Parameters
+        ----------
+        points : np.ndarray
+            Array of points to be converted
+            Shape (N,3)
+
+        Returns
+        -------
+        np.ndarray
+        points in reduced format
+        Shape (N,3)
+        '''
+        red_pts = np.matmul(points, np.linalg.inv(self.rec_latt))
+        return red_pts
