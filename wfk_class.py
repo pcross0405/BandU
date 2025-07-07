@@ -97,7 +97,7 @@ class WFK():
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
-    # method transforming reciprocal space wfks to real space
+    # method for putting plane wave coefficients onto 3D gridded array
     def GridWFK(
             self, band_index:int=-1
     )->Self:
@@ -125,6 +125,35 @@ class WFK():
                 gridded_wfk[kz, kx, ky] = self.wfk_coeffs[k]
         new_WFK = copy(self)
         new_WFK.wfk_coeffs = gridded_wfk
+        return new_WFK
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for undoing grid
+    def RemoveGrid(
+        self, band_index:int=-1
+    )->Self:
+        '''
+        Returns copy of WFK object with coefficients removed from the 3D gridded array.
+
+        Parameters
+        ----------
+        band_index : int
+            Integer represent the band index of the wavefunction coefficients to be transformed.
+            If nothing is passed, it is assumed the coefficients of a single band are supplied.
+        '''
+        # check if coefficients are gridded before undoing grid format
+        if self.wfk_coeffs.shape != (self.ngfftz,self.ngfftx,self.ngffty):
+            raise ValueError((
+                f'Plane wave coefficients must be in 3D grid with shape ({self.ngfftz}, {self.ngfftx}, {self.ngffty})'
+                'in order to remove the gridded format'
+            ))
+        if band_index >= 0:
+            coeffs_no_grid = self.wfk_coeffs[band_index]
+        else:
+            coeffs_no_grid = self.wfk_coeffs
+        # returns values at each plane wave index, undoing grid
+        coeffs_no_grid = coeffs_no_grid[tuple(self.pw_indices.T)]
+        new_WFK = copy(self)
+        new_WFK.wfk_coeffs = coeffs_no_grid
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
@@ -274,6 +303,8 @@ class WFK():
             tnons = True
             sym_mats = self.symrel
         # initialize symmetrically equivalent point and value arrays
+        if len(points.shape) == 1:
+            points.reshape((1,points.shape[0]))
         ind_len = np.shape(points)[0]
         if values is np.empty([]):
             values = np.zeros((ind_len,1))
@@ -283,14 +314,14 @@ class WFK():
         if inverse:
             for i, op in enumerate(sym_mats):
                 if tnons:
-                    points -= self.non_symm_vecs[i]
+                    points += self.non_symm_vecs[i]
                 new_pts:np.ndarray = np.matmul(np.linalg.inv(op), points.T).T
                 sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
                 sym_vals[i*ind_len:(i+1)*ind_len,:] = values
         else:
             for i, op in enumerate(sym_mats):
                 if tnons:
-                    points -= self.non_symm_vecs[i]
+                    points += self.non_symm_vecs[i]
                 new_pts:np.ndarray = np.matmul(op, points.T).T
                 sym_pts[i*ind_len:(i+1)*ind_len,:] = new_pts
                 sym_vals[i*ind_len:(i+1)*ind_len,:] = values
@@ -339,6 +370,7 @@ class WFK():
             new_pw_inds += shifts[ind,:]
             new_coeffs = copy(self)
             new_coeffs.pw_indices = new_pw_inds
+            new_coeffs.kpoints = sym_kpoints[ind,:] + shifts[ind,:]
             phase_factor = self._FindPhase(
                 self.non_symm_vecs[ind % len(self.non_symm_vecs)],
                 self.pw_indices,
