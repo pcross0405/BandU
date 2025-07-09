@@ -144,7 +144,7 @@ class WFK():
         if self.wfk_coeffs.shape != (self.ngfftz,self.ngfftx,self.ngffty):
             raise ValueError((
                 f'Plane wave coefficients must be in 3D grid with shape ({self.ngfftz}, {self.ngfftx}, {self.ngffty})'
-                'in order to remove the gridded format'
+                ' in order to remove the gridded format'
             ))
         if band_index >= 0:
             coeffs_no_grid = self.wfk_coeffs[band_index]
@@ -370,7 +370,7 @@ class WFK():
             new_pw_inds += shifts[ind,:]
             new_coeffs = copy(self)
             new_coeffs.pw_indices = new_pw_inds
-            new_coeffs.kpoints = sym_kpoints[ind,:] + shifts[ind,:]
+            new_coeffs.kpoints = sym_kpoints[ind,:] - shifts[ind,:]
             phase_factor = self._FindPhase(
                 self.non_symm_vecs[ind % len(self.non_symm_vecs)],
                 self.pw_indices,
