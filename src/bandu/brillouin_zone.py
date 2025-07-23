@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.spatial import Voronoi, KDTree, Delaunay
-from translate import TranslatePoints
+from . import translate as trnslt
 
 # Brillouin Zone object
 class BZ():
@@ -8,7 +8,7 @@ class BZ():
         self, rec_latt:np.ndarray
     )->None:
         self.rec_latt = rec_latt
-        _3xgrid, _ = TranslatePoints(np.zeros((1,3)), np.zeros(1), self.rec_latt)
+        _3xgrid, _ = trnslt.TranslatePoints(np.zeros((1,3)), np.zeros(1), self.rec_latt)
         self._3xgrid = _3xgrid
         self.vertices = self._BZpts()
 #---------------------------------------------------------------------------------------------------------------------#
@@ -100,7 +100,7 @@ class BZ():
         # calculate shifts to move outside points back into BZ
         shifts = np.zeros((outside_pts[outside_pts < 0].shape[0],3))
         rec_grid = KDTree(self._3xgrid)
-        shift_grid, _ = TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
+        shift_grid, _ = trnslt.TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
         for i, pt in enumerate(points[outside_pts < 0]):
             _, closest_pt = rec_grid.query(pt, k=1)
             shifts[i,:] = shift_grid[closest_pt, :]
@@ -137,7 +137,7 @@ class BZ():
     def _BZEdgePt(
         self, points:np.ndarray, cart:bool=True
     )->np.ndarray:
-        shift_grid, _ = TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
+        shift_grid, _ = trnslt.TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
         test_point = self.PointLocate(shift_grid + points, cart=cart)
         return test_point
     #-----------------------------------------------------------------------------------------------------------------#
