@@ -78,7 +78,7 @@ class XSF():
             raise LookupError('3D density data not found in XSF file')
         # convert density to 3D array of floats
         density_lines = [line.strip().split(' ') for line in density_lines]
-        density_lines = [val for line in density_lines for val in line]
+        density_lines = [val for line in density_lines for val in line if val != '']
         density_lines = np.array(density_lines, dtype=float)
         density_lines = density_lines.reshape((self.ngfftz, self.ngfftx, self.ngffty))
         return density_lines
