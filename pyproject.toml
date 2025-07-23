@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "BandU"
+version = "1.0.0"
+authors = [
+  { name="Patrick Cross", email="pcross@wisc.edu" },
+]
+description = "The BandU program constructs a rank ordered series of crystal orbitals using principal component analysis. These principal orbital components can then be projected on the Fermi surface and visualized"
+readme = "README.md"
+requires-python = ">=3.11"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+[project.urls]
+Homepage = "https://github.com/pcross0405/BandU"
+Issues = "https://github.com/pcross0405/BandU/issues"
