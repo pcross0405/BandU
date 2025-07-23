@@ -1,14 +1,13 @@
 import numpy as np
 import pyvista as pv
 from pyvistaqt import BackgroundPlotter
-from brillouin_zone import BZ
-from isosurface_class import Isosurface
-from wfk_class import WFK
+from copy import copy
 import pickle as pkl
 from matplotlib.colors import ListedColormap
-from copy import copy
-from translate import TranslatePoints
-from typing import Generator
+from . import brillouin_zone as brlzn
+from . import isosurface_class as ic
+from . import wfk_class as wc
+from . import translate as trslt
 
 class Plotter():
     '''
@@ -27,6 +26,9 @@ class Plotter():
     empty_mesh : bool
         Allow PyVista plotter to plot meshes even if no surface is present
         Default will throw exception of an empty surface is being plotted (False)
+    plot : bool
+        Enable creation of PyVista Plotter
+        Must be enabled for plotting, default enables plotter (True)
 
     Methods
     -------
@@ -39,16 +41,18 @@ class Plotter():
         Loads a save file
     '''
     def __init__(
-        self, isosurface:Isosurface=Isosurface(points=np.ones((1,3))), save:bool=True, save_file:str='Fermi_surface.pkl', 
-        empty_mesh:bool=False, _debug:bool=False
+        self, isosurface:ic.Isosurface=ic.Isosurface(points=np.ones((1,3))), save:bool=True,
+        empty_mesh:bool=False, _debug:bool=False, save_file:str='Fermi_surface.pkl', plot:bool=True
     ):
         self.isosurface=isosurface
-        self.p:pv.Plotter=BackgroundPlotter(window_size=(600,400))
         self.save=save
         self.save_file=save_file
         self._debug=_debug
-        pv.global_theme.allow_empty_mesh=empty_mesh
-        self.p.enable_depth_peeling(number_of_peels=10)
+        self.plot=plot
+        if self.plot:
+            self.p:pv.Plotter=BackgroundPlotter(window_size=(600,400))
+            pv.global_theme.allow_empty_mesh=empty_mesh
+            self.p.enable_depth_peeling(number_of_peels=10)
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
@@ -56,7 +60,7 @@ class Plotter():
     def _SetOpacities(
         self, contour:pv.PolyData
     )->np.ndarray:
-        bz = BZ(self.isosurface.rec_latt)
+        bz = brlzn.BZ(self.isosurface.rec_latt)
         opacities = bz.PointLocate(contour.points, cart=False)
         opacities[opacities >= 0] = 1
         opacities[opacities < 0] = 0
@@ -226,8 +230,10 @@ class Plotter():
                 kwargs.pop('f', None)
                 pkl.dump(kwargs, f)
                 pkl.dump(self.isosurface, f)
+        if not self.plot:
+            raise SystemExit()
         # plot BZ boundary
-        vor_verts = BZ(self.isosurface.rec_latt).vertices
+        vor_verts = brlzn.BZ(self.isosurface.rec_latt).vertices
         if bz_show:
             self.p.add_lines(vor_verts, color='black', width=bz_width)
         # set opacity of each band
@@ -328,8 +334,8 @@ class Plotter():
         self.p.app.exec_() # type: ignore
     #-----------------------------------------------------------------------------------------------------------------#
     # method to compute bandu fxn and one electron wfk overlaps
-    def _Overlaps(
-        self, ir_wfk:WFK, bandu:WFK, num_bands:int
+    def _Overlaps_w_sym(
+        self, ir_wfk:wc.WFK, bandu:wc.WFK, num_bands:int
     )->np.ndarray:
         # kpoint to symmetrically generate
         kpt = ir_wfk.kpoints
@@ -353,6 +359,22 @@ class Plotter():
                 overlap_vals[j,i] = overlap
         return overlap_vals
     #-----------------------------------------------------------------------------------------------------------------#
+    # method to compute bandu fxn and one electron wfk overlaps
+    def _Overlaps_no_sym(
+        self, ir_wfk:wc.WFK, bandu:wc.WFK, num_bands:int
+    )->np.ndarray:
+        # initialize array for overlap values
+        overlap_vals = np.zeros((1,num_bands), dtype=float)
+        # loop over bands
+        for i, _ in enumerate(self.isosurface.nbands):
+            wfk = ir_wfk.GridWFK()
+            wfk = wfk.FFT()
+            wfk = wfk.Normalize()
+            overlap = np.sum(np.conj(bandu.wfk_coeffs)*wfk.wfk_coeffs)
+            overlap = np.square(np.abs(overlap))
+            overlap_vals[0,i] = overlap
+        return overlap_vals
+    #-----------------------------------------------------------------------------------------------------------------#
     # method to interpolate overlap values
     def _InterpolateOverlaps(
         self, contour:pv.PolyData, overlap_values:np.ndarray
@@ -360,7 +382,7 @@ class Plotter():
         # recreate eigenvalue grid as base for surface color grid
         color_grid = copy(self.isosurface.grid)
         # translate overlap values to 3x3x3 grid
-        trans_color_points, trans_color_values = TranslatePoints(
+        trans_color_points, trans_color_values = trslt.TranslatePoints(
             self.isosurface.points,
             overlap_values.reshape((-1,1)),
             self.isosurface.rec_latt
@@ -381,7 +403,7 @@ class Plotter():
     #-----------------------------------------------------------------------------------------------------------------#
     # method to calculate surface color values from XSF and WFK
     def SurfaceColor(
-        self, wfk_path:str, xsf_path:str
+        self, wfk_path:str, xsf_path:str, sym:bool=False
     )->list:
         '''
         Method for calculating BandU function overlap with states at a specified isoenergy.
@@ -393,24 +415,27 @@ class Plotter():
             Path to ABINIT WFK file
         xsf_path : str
             Path to BandU XSF file
+        sym : bool
+            Symmetrically generate full Brillouin Zone
+            Default will not generate Brillouin Zone and instead symmetrize surface colors (False)
         '''
-        from abinit_reader import AbinitWFK
-        from xsf_reader import XSF
+        from . import abinit_reader as ar
+        from . import xsf_reader as xsfr
         # list of overlap values
         overlaps = np.zeros(1)
         # read fermi surface wavefunction
-        fermi_wfk = AbinitWFK(filename=wfk_path)   
+        fermi_wfk = ar.AbinitWFK(filename=wfk_path)   
         # get number of bands
         nband = len(self.isosurface.nbands)
         # paths to real and imaginary bandu xsf files
         real_path = xsf_path + '_real.xsf'
         imag_path = xsf_path + '_imag.xsf'
         # read in xsf
-        real_fxn = XSF(xsf_file=real_path)
-        imag_fxn = XSF(xsf_file=imag_path)
+        real_fxn = xsfr.XSF(xsf_file=real_path)
+        imag_fxn = xsfr.XSF(xsf_file=imag_path)
         print('XSF read')
         # convert xsf to wfk object
-        bandu_fxn = WFK(
+        bandu_fxn = wc.WFK(
             wfk_coeffs=real_fxn.ReadDensity() + 1j*imag_fxn.ReadDensity(),
             ngfftx=real_fxn.ngfftx,
             ngffty=real_fxn.ngffty,
@@ -420,11 +445,21 @@ class Plotter():
         bandu_fxn = bandu_fxn.RemoveXSF()
         # loop through fermi surface kpoints and calc overlap with bandu fxn
         for i, kpt in enumerate(fermi_wfk.ReadWFK()):
-            vals = self._Overlaps(kpt, bandu_fxn, nband)
+            if sym:
+                vals = self._Overlaps_w_sym(kpt, bandu_fxn, nband)
+            else:
+                vals = self._Overlaps_no_sym(kpt, bandu_fxn, nband)
             if i == 0:
                 overlaps = vals
             else:
                 overlaps = np.concatenate((overlaps, vals), axis=0)
+        # symmetrically permute overlap values if they were only calculated on irreducible BZ wedge when sym==False
+        if not sym:
+            symrel = fermi_wfk.symrel
+            nsym = fermi_wfk.nsym
+            kpts = fermi_wfk.kpts
+            permute_overlaps = wc.WFK(symrel=np.array(symrel), nsym=nsym)
+            _, overlaps = permute_overlaps.Symmetrize(points=np.array(kpts), values=overlaps)
         # interpolate overlap values for smooth coloration
         scalars = []
         for i in range(overlaps.shape[1]):
@@ -521,12 +556,13 @@ class Plotter():
             A list of values defining the coloration of the isosurface
             Default plots no coloration
         '''
+        # functionality for adding multiple projections onto one surface
         if type(save_path) == list:
             all_scalars = []
             for save in save_path:
                 with open(save, 'rb') as f:
                     kwargs_dict:dict = pkl.load(f)
-                    self.isosurface:Isosurface = pkl.load(f)
+                    self.isosurface:ic.Isosurface = pkl.load(f)
                 all_scalars.append(kwargs_dict['surface_vals'])
             sizes = []
             for surface_vals in all_scalars[0]:
@@ -536,11 +572,13 @@ class Plotter():
                 for i, surface_vals in enumerate(scalars):
                     new_scalars[i] += surface_vals
             kwargs_dict['surface_vals'] = new_scalars # type: ignore
+        # replot a single surface
         else:
             with open(save_path, 'rb') as f: # type: ignore
                 kwargs_dict:dict = pkl.load(f)
-                self.isosurface:Isosurface = pkl.load(f)
+                self.isosurface:ic.Isosurface = pkl.load(f)
         for k, val in kwargs.items(): # type: ignore
             kwargs_dict[k] = val # type: ignore       
         self.save = False
+        self.plot = True
         self.Plot(**kwargs_dict) # type: ignore
