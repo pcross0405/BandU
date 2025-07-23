@@ -47,7 +47,7 @@ REQUIRED FOR CUSTOM COLORS
 
 WAVEFUNCTIONS THAT CAN BE READ DIRECTLY
 
-> Currently only reading directly from ABINIT 7 wavefunctions is supported.
+> Currently only reading directly from ABINIT 7 and 10 wavefunctions is supported.
 > Reading eigenvalues from other DFT packages will come in future updates.
 
    - [ABINIT](https://abinit.github.io/abinit_web/)
