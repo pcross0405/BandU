@@ -854,7 +854,7 @@ class Abinit10WFK():
                 # only need eigenvalues for Fermi surface, skip over everything else
                 for nband in range(nband_temp):
                     eigenval = bytes2float(wfk.read(8))
-                    eigenvalues[nband] = eigenval
+                    eigenvalues[:,nband] = eigenval
                 wfk.read(nband_temp*8)
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
