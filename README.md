@@ -62,12 +62,11 @@ Please report any issues [here](https://github.com/pcross0405/BandU/issues)
 
 An example script that can run the different functions of the BandU program is given below.
 -------------------------------------------------------------------------------------------
-from bandu.bandu import BandU
-from bandu.abinit_reader import AbinitWFK
-from bandu.isosurface_class import Isosurface
-from bandu.plotter import Plotter
-from bandu.colors import Colors
-
+from bandu.bandu import BandU<br />
+from bandu.abinit_reader import AbinitWFK<br />
+from bandu.isosurface_class import Isosurface<br />
+from bandu.plotter import Plotter<br />
+from bandu.colors import Colors<br />
 
 root_name = 'your file root name here' # root_name of WFK files and of XSF files<br />
 xsf_number = 1 # XSF file number to be read in<br />
@@ -77,6 +76,7 @@ wfk_path = f'path\to\WFK\file\{root_name}_o_WFK'<br />
 xsf_path = f'path\to\XSF\file\{root_name}\_bandu_{xsf_number}'<br />
 bandu_name = f'{root_name}_bandu'<br />
 
+<pre>
 def main(<br />
         Band_U:bool, Iso_Surf:bool, Load_Surf:bool<br />
 )->None:<br />
@@ -124,3 +124,4 @@ if \__name__ == '\__main__':<br />
         Iso_Surf = False,<br />
         Load_Surf = False,<br />
     )<br />
+<pre>
