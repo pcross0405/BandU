@@ -2,7 +2,7 @@ import struct
 import numpy as np
 from typing import Generator, Union
 import sys
-from wfk_class import WFK
+from . import wfk_class as wc
 np.set_printoptions(threshold=sys.maxsize)
 
 def bytes2float(bin_data)->float:
@@ -196,7 +196,7 @@ class Abinit7WFK():
     # method to read entire body of abinit version 7 wavefunction file
     def ReadWFK(
         self, energy_level=np.nan, width=np.nan
-    )->Generator[WFK, None, None]:
+    )->Generator[wc.WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v7 WFK file
 
@@ -288,7 +288,7 @@ class Abinit7WFK():
     # method to read in plane wave coefficients
     def _ReadCoeffs(
         self, wfk_file, nbands, npws, eigs, pw_inds, ind
-    )->WFK:
+    )->wc.WFK:
         occupancies = np.zeros((1,nbands), dtype=float)
         coeffs = np.zeros((nbands,npws), dtype=complex)
         for nband in range(nbands):
@@ -304,7 +304,7 @@ class Abinit7WFK():
                 cg[:,pw] = cg1 + 1j*cg2
             coeffs[nband,:] = cg
             wfk_file.read(4) 
-        return WFK(
+        return wc.WFK(
             eigenvalues=np.array(eigs), 
             wfk_coeffs=np.array(coeffs),
             pw_indices=np.array(pw_inds),
@@ -328,7 +328,7 @@ class Abinit7WFK():
     # method to read only eigenvalues from body of abinit version 7 wavefunction file
     def ReadEigenvalues(
         self
-    )->Generator[WFK, None, None]:
+    )->Generator[wc.WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v7 WFK file.
         '''
@@ -362,7 +362,7 @@ class Abinit7WFK():
                 wfk.read(nband_temp*8)
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
-                yield WFK(
+                yield wc.WFK(
                     eigenvalues=np.array(eigenvalues), 
                     kpoints=np.array(self.kpts[j]),
                     nkpt=self.nkpt,
@@ -651,7 +651,7 @@ class Abinit10WFK():
     # method to read entire body of abinit version 7 wavefunction file
     def ReadWFK(
         self, energy_level=np.nan, width=np.nan
-    )->Generator[WFK, None, None]:
+    )->Generator[wc.WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v10 WFK file.
 
@@ -764,7 +764,7 @@ class Abinit10WFK():
     # method to read in plane wave coefficients
     def _ReadCoeffs(
         self, wfk_file, nbands, npws, eigs, pw_inds, ind
-    )->WFK:
+    )->wc.WFK:
         occupancies = np.zeros((1,nbands), dtype=float)
         coeffs = np.zeros((nbands,npws), dtype=complex)
         for nband in range(nbands):
@@ -780,7 +780,7 @@ class Abinit10WFK():
                 cg[:,pw] = cg1 + 1j*cg2
             coeffs[nband,:] = cg
             wfk_file.read(4) 
-        return WFK(
+        return wc.WFK(
             eigenvalues=np.array(eigs), 
             wfk_coeffs=np.array(coeffs),
             pw_indices=np.array(pw_inds),
@@ -804,7 +804,7 @@ class Abinit10WFK():
     # method to read only eigenvalues from body of abinit version 10 wavefunction file
     def ReadEigenvalues(
         self
-    )->Generator[WFK, None, None]:
+    )->Generator[wc.WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v10 WFK file.
         '''
@@ -858,7 +858,7 @@ class Abinit10WFK():
                 wfk.read(nband_temp*8)
                 wfk.read(4)
                 wfk.read(nband_temp*(8 + npw*16))
-                yield WFK(
+                yield wc.WFK(
                     eigenvalues=np.array(eigenvalues), 
                     kpoints=np.array(self.kpts[j]),
                     nkpt=self.nkpt,
