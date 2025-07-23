@@ -38,6 +38,11 @@ class BandU():
             Run the program on a lower memory setting
             The low_mem tag will print plane wave cofficients to a Python pickle to read from disk later.
             Default does not run in low memory mode (False)
+
+        Methods
+        -------
+        ToXSF
+            Writes real and imaginary parts of BandU functions to XSF files
         '''
         self.grid:bool=grid
         self.fft:bool=fft
@@ -259,4 +264,5 @@ class BandU():
             file_name = xsf_name + f'_{i+1}'
             wfk = copy(self.bandu_fxns[i])
             wfk.wfk_coeffs = wfk.wfk_coeffs.reshape((z,x,y))
+            wfk = wfk.XSFFormat()
             wfk.WriteXSF(xsf_file=file_name)
