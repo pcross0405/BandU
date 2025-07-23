@@ -133,7 +133,8 @@ class BZ():
         return outside_pts
     #-----------------------------------------------------------------------------------------------------------------#
     # method for finding if point is on BZ edge/face
-    def BZEdgePt(
+    # not working
+    def _BZEdgePt(
         self, points:np.ndarray, cart:bool=True
     )->np.ndarray:
         shift_grid, _ = TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
