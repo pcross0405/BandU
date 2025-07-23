@@ -108,7 +108,7 @@ class BZ():
         all_shifts[outside_pts < 0] = shifts
         return all_shifts.astype(int)
     #-----------------------------------------------------------------------------------------------------------------#
-    # method for finding if points are outside of BZ
+    # method for finding if points are outside or inside of BZ
     def PointLocate(
         self, points:np.ndarray, cart:bool=True
     )->np.ndarray:
@@ -125,13 +125,20 @@ class BZ():
         -------
         np.ndarray
         elements < 0 correspond to points outside the Brillouin Zone
-        elements = 0 correspond to points on the edge 
         elements > 0 correspond to points inside
         '''
         if cart:
             points = self.MakeCart(points=points)
         outside_pts = Delaunay(self.vertices).find_simplex(points)
         return outside_pts
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for finding if point is on BZ edge/face
+    def BZEdgePt(
+        self, points:np.ndarray, cart:bool=True
+    )->np.ndarray:
+        shift_grid, _ = TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
+        test_point = self.PointLocate(shift_grid + points, cart=cart)
+        return test_point
     #-----------------------------------------------------------------------------------------------------------------#
     # method for converting points to cartesian format
     def MakeCart(
