@@ -66,6 +66,31 @@ class WFK():
         If the system is time reversal symmetric, then reciprocal space electronic states will share inversion 
         symmetry even if the real space symmetries do not include inversion
         Default assumes noncentrosymmetric systems have time reversal symmetry (True)
+
+    Methods
+    -------
+    GridWFK
+        Assembles plane wave coefficients on FFT grid
+    RemoveGrid
+        Undoes FFT grid and returns coefficients to a flat array
+    FFT
+        Applies Fast Fourier Transform to plane wave coefficients
+    IFFT
+        Applies Inverse Fast Fourier Transform to plane wave coefficients
+    Normalize
+        Calculates and applies normalization factor to coefficients
+    Real2Reciprocal
+        Calculates reciprocal lattice vectors from real space vectors
+    Symmetrize
+        Generates symmetrical copies from symmetry matrix operations
+    SymWFK
+        Generates symmetrical plane wave coefficients from operations
+    XSFFormat
+        Converts plane wave coefficients grid into XSF formatted grid
+    RemoveXSF
+        Converts XSF formatted grid into regular FFT grid
+    WriteXSF
+        Prints out XSF files for both the real and imaginary parts of the coefficients
     '''
     def __init__(
         self, 
@@ -310,6 +335,8 @@ class WFK():
             values = np.zeros((ind_len,1))
         sym_pts = np.zeros((sym_num*ind_len,3))
         sym_vals = np.zeros((sym_num*ind_len,self.nbands))
+        if self.non_symm_vecs.all() == np.zeros(1):
+            self.non_symm_vecs = np.zeros(self.nsym)
         # apply symmetry operations to points
         if inverse:
             for i, op in enumerate(sym_mats):
