@@ -1,9 +1,9 @@
 import numpy as np
 from typing import Generator
-from wfk_class import WFK
 from copy import copy
-from brillouin_zone import BZ
-from translate import TranslatePoints
+from . import brillouin_zone as brlzn
+from . import translate as trnslt
+from . import wfk_class as wc
 
 class BandU():
     def __init__(
@@ -50,7 +50,7 @@ class BandU():
         self.sym:bool=sym
         self.low_mem:bool=low_mem
         self.found_states:int=0
-        self.bandu_fxns:list[WFK]=[]
+        self.bandu_fxns:list[wc.WFK]=[]
         self.duped_states:int=0
         self.plot=plot
         # find all states within width
@@ -69,19 +69,19 @@ class BandU():
         # write output file
         fermi = self.bandu_fxns[0].fermi_energy
         with open('eigenvalues.out', 'w') as f:
-            print(f'Width: {width}, found states: {self.found_states}, total states: {self.found_states + self.duped_states}', file=f)
+            print(f'Width: {width}, found states: {self.found_states}', file=f)
             print(f'Energy level: {energy_level+fermi}, Fermi energy: {fermi}', file=f)
             print(np.abs(principal_vals), file=f)   
             print('Omega Values', file=f)
             print(omega_vals, file=f)   
-            print('Omega Check (value of 0 indicates Omega is at local extreme)', file=f)
+            print('Omega Check (value of 0 indicates Omega is at local extremum)', file=f)
             print(omega_check, file=f)
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
     # method transforming reciprocal space wfks to real space
     def _FindStates(
-        self, energy_level:float, width:float, wfks:Generator[WFK,None,None]
+        self, energy_level:float, width:float, wfks:Generator[wc.WFK,None,None]
     ):
         # loop through every state
         for state in wfks:
@@ -103,9 +103,9 @@ class BandU():
     #-----------------------------------------------------------------------------------------------------------------#
     # method for processing planewave coefficient data from FindStates
     def _Process(
-            self, state:WFK
-    )->Generator[WFK,None,None]:
-        funcs:list[WFK] = []
+            self, state:wc.WFK
+    )->Generator[wc.WFK,None,None]:
+        funcs:list[wc.WFK] = []
         # generate symmetrically equivalent coefficients
         if self.sym:
             for sym_coeffs in state.SymWFKs(kpoint=state.kpoints):
@@ -129,20 +129,20 @@ class BandU():
     def _CheckEdgeCase(
         self
     ):
-        bz = BZ(self.bandu_fxns[0].Real2Reciprocal())
+        bz = brlzn.BZ(self.bandu_fxns[0].Real2Reciprocal())
         x = self.bandu_fxns[0].ngfftx
         y = self.bandu_fxns[0].ngffty
         z = self.bandu_fxns[0].ngfftz
         all_shifts:list[np.ndarray] = []
         wfk_to_shift:list[int] = []
-        dupes:list[WFK] = []
+        dupes:list[wc.WFK] = []
         for i, wfk in enumerate(self.bandu_fxns):
             # if point on edge, translate to find other periodic points
             edge_pts = bz._BZEdgePt(wfk.kpoints)
             print(wfk.kpoints)
             print(edge_pts)
             if len(edge_pts[edge_pts > 0]) > 0:
-                shifts, _ = TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
+                shifts, _ = trnslt.TranslatePoints(np.zeros((1,3)), np.zeros(1), np.identity(3))
                 shifts = shifts[edge_pts > 0].astype(int)
                 all_shifts.append(shifts)
                 wfk_to_shift.append(i)
