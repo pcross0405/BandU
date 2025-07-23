@@ -60,4 +60,67 @@ Please report any issues [here](https://github.com/pcross0405/BandU/issues)
 -------------------------------------------------------------------------------------------------------------------------  
 <h1><p align="center">TUTORIAL</p></h1>
 
-TBA
+An example script that can run the different functions of the BandU program is given below.
+-------------------------------------------------------------------------------------------
+from bandu.bandu import BandU
+from bandu.abinit_reader import AbinitWFK
+from bandu.isosurface_class import Isosurface
+from bandu.plotter import Plotter
+from bandu.colors import Colors
+
+
+root_name = 'your file root name here' # root_name of WFK files and of XSF files
+xsf_number = 1 # XSF file number to be read in
+energy_level = 0.000 # Energy relative to the Fermi energy to be sampled
+width = 0.0005 # Search half the the width above and below the specified energy level
+wfk_path = f'path\to\WFK\file\{root_name}_o_WFK'
+xsf_path = f'path\to\XSF\file\{root_name}_bandu_{xsf_number}'
+bandu_name = f'{root_name}_bandu'
+
+def main(
+        Band_U:bool, Iso_Surf:bool, Load_Surf:bool
+)->None:
+    if Band_U: # create BandU principal orbital components
+        wfk_gen = AbinitWFK(wfk_path).ReadWFK(
+            energy_level = energy_level, 
+            width=width
+         )
+        wfk = BandU(
+            wfks = wfk_gen, 
+            energy_level = energy_level, 
+            width = width, 
+            sym = True
+         )
+        wfk.ToXSF(
+            xsf_name = bandu_name, 
+            nums = [1,10]
+         )
+    elif Iso_Surf: # construct energy isosurfaces and plot them
+        contours = Isosurface(
+            wfk_name = wfk_path, 
+            energy_level = energy_level,
+            width = width
+        )
+        contours.Contour() # make contours
+        plot = Plotter(
+            isosurface = contours, 
+            save_file=f'{root_name}_bandu_{xsf_number}_fermi_surf.pkl'
+         ) # create plotter object
+        overlap_vals = plot.SurfaceColor(
+            wfk_path=wfk_path,
+            xsf_path=xsf_path,
+        ) # compute overlap between principal orbital component and states in Brillouin Zone
+        plot.Plot(
+            surface_vals = overlap_vals,
+            colormap = Colors().blues,
+        ) # plot contours
+    elif LoadSurf:
+        Plotter().Load(
+            save_path='{root_name}_bandu_{xsf_number}_fermi_surf.pkl',
+        )
+if __name__ == '__main__':
+    main(
+        Band_U = False,
+        Iso_Surf = False,
+        Load_Surf = False,
+    ) 
