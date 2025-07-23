@@ -74,7 +74,7 @@ xsf_number = 1 # XSF file number to be read in
 energy_level = 0.000 # Energy relative to the Fermi energy to be sampled
 width = 0.0005 # Search half the the width above and below the specified energy level
 wfk_path = f'path\to\WFK\file\{root_name}_o_WFK'
-xsf_path = f'path\to\XSF\file\{root_name}\_bandu_{xsf_number}'
+xsf_path = f'path\to\XSF\file\{root_name}_bandu_{xsf_number}'
 bandu_name = f'{root_name}_bandu'
 
 def main(
@@ -114,11 +114,11 @@ def main(
             surface_vals = overlap_vals,
             colormap = Colors().blues,
         ) # plot contours
-    elif LoadSurf:
+    elif Load_Surf:
         Plotter().Load(
             save_path='{root_name}_bandu_{xsf_number}_fermi_surf.pkl',
         )
-if \__name__ == '\__main__':
+if __name__ == '__main__':
     main(
         Band_U = False,
         Iso_Surf = False,
