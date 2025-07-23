@@ -3,7 +3,7 @@ from scipy.fft import fftn, ifftn
 import sys
 from typing import Self, Generator
 from copy import copy
-from brillouin_zone import BZ
+from . import brillouin_zone as brlzn
 np.set_printoptions(threshold=sys.maxsize)
 
 class WFK():
@@ -385,7 +385,7 @@ class WFK():
         sym_pw_inds = sym_pw_inds.astype(int)
         ind_range = self.pw_indices.shape[0]
         # find reciprocal lattice shifts to move all points into BZ
-        bz = BZ(rec_latt=self.Real2Reciprocal())
+        bz = brlzn.BZ(rec_latt=self.Real2Reciprocal())
         shifts = bz.GetShifts(sym_kpoints)
         # create WFK copies with new planewave indices
         for i, ind in enumerate(unique_inds):
@@ -414,7 +414,7 @@ class WFK():
     def GetBZPtsEigs(
         self
     )->tuple[np.ndarray,np.ndarray]:
-        bz = BZ(rec_latt=self.Real2Reciprocal())
+        bz = brlzn.BZ(rec_latt=self.Real2Reciprocal())
         bz_kpts, bz_eigs = self.Symmetrize(points=self.kpoints, values=self.eigenvalues, reciprocal=True)
         bz_kpts -= bz.GetShifts(bz_kpts)
         return bz_kpts, bz_eigs
