@@ -138,7 +138,7 @@ class BandU():
         dupes:list[WFK] = []
         for i, wfk in enumerate(self.bandu_fxns):
             # if point on edge, translate to find other periodic points
-            edge_pts = bz.BZEdgePt(wfk.kpoints)
+            edge_pts = bz._BZEdgePt(wfk.kpoints)
             print(wfk.kpoints)
             print(edge_pts)
             if len(edge_pts[edge_pts > 0]) > 0:
