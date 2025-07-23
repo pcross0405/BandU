@@ -1,9 +1,9 @@
 import pyvista as pv
 import numpy as np
-from translate import TranslatePoints
-from abinit_reader import AbinitWFK
-from wfk_class import WFK
-from brillouin_zone import BZ
+from . import translate as trnslt
+from . import abinit_reader as ar
+from . import wfk_class as wc
+from . import brillouin_zone as brlzn
 
 # object for creating reciprocal space energy isosurfaces
 class Isosurface():
@@ -147,7 +147,7 @@ class Isosurface():
     ):
         # setup grid interpolation
         null_value = self.fermi_energy + self.energy_level + self.width/2 * 1.05
-        trans_pts, trans_vals = TranslatePoints(
+        trans_pts, trans_vals = trnslt.TranslatePoints(
             points=points, 
             values=values.reshape((values.shape[0],1)), 
             lattice_vecs=self.rec_latt
@@ -175,7 +175,7 @@ class Isosurface():
         self, filename:str
     )->tuple[np.ndarray,np.ndarray, list]:
         # collect kpoints and eigenvalues from wfk file
-        wfk = AbinitWFK(filename=filename)
+        wfk = ar.AbinitWFK(filename=filename)
         eigs = []
         syms = np.array(wfk.symrel)
         nsym = wfk.nsym
@@ -183,7 +183,7 @@ class Isosurface():
         nbands = wfk.bands[0]
         nkpt = wfk.nkpt
         self.fermi_energy = wfk.fermi
-        self.rec_latt = WFK(lattice=wfk.real_lattice).Real2Reciprocal()
+        self.rec_latt = wc.WFK(lattice=wfk.real_lattice).Real2Reciprocal()
         if self._debug:
             eigs = np.zeros((nkpt,10))
             band_num = [1,2,3,4,5]
@@ -202,9 +202,9 @@ class Isosurface():
                         break            
         # return kpoints and bands of interest
         bands = np.take(eigs, band_num, axis=1)
-        shifts =  BZ(self.rec_latt).GetShifts(kpoints)
+        shifts = brlzn.BZ(self.rec_latt).GetShifts(kpoints)
         kpoints = kpoints - shifts
-        wfk = WFK(symrel=syms, nsym=nsym, nbands=len(band_num), nkpt=nkpt)
+        wfk = wc.WFK(symrel=syms, nsym=nsym, nbands=len(band_num), nkpt=nkpt)
         all_kpts = np.zeros((1,3))
         all_eigs = np.zeros((1,bands.shape[1]))
         # symmetrize kpoints
