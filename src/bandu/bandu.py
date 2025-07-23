@@ -113,6 +113,11 @@ class BandU():
                 funcs.append(sym_coeffs)
             self.found_states -= 1
         else:
+            # shift point baxk into Brillouin Zone as necessary
+            rec_latt = state.Real2Reciprocal()
+            shift = brlzn.BZ(rec_latt=rec_latt).GetShifts(state.kpoints)
+            state.pw_indices += shift
+            state.kpoints -= shift
             funcs.append(state)
         # apply desired transformations
         for wfk in funcs:
@@ -229,7 +234,8 @@ class BandU():
         ax.tick_params(axis='both', labelsize=12)
         plt.xlim(1.0,len(y)+5.0)
         plt.ylim=(0,np.max(y))
-        plt.xticks(ticks=[val for val in range(0,len(y)+1) if val % 10 == 0])
+        mod_val = round(self.found_states/5 - 0.5)
+        plt.xticks(ticks=[val for val in range(0,len(y)+1) if val % mod_val == 0])
         plt.rcParams['font.family'] = 'Times New Roman'
         plt.savefig('bandu_eigenvalues.png',dpi=500)
     #-----------------------------------------------------------------------------------------------------------------#
