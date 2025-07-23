@@ -9,7 +9,7 @@ periodic material to provide a real space visualization of the states that signi
 <p align="justify">These real space functions can then be projected onto the Fermi surface to provide a clear visual
 for where a nesting vector may combine two points in reciprocal space.</p>
 
-<p align="justify">This package is designed to be very straightforward in its use, offering Fermi surface and BandU functions 
+<p align="justify">This package is designed to be very straightforward in its use, offering Fermi surface and BandU function 
 visualizations in as little as 5 lines of Python script. This package can also be used to just visual the Fermi surface, without 
 BandU projections, if provided with the necessary k-point and eigenvalue data.</p>
 
@@ -69,7 +69,7 @@ from bandu.plotter import Plotter
 from bandu.colors import Colors
 
 
-root_name = 'your file root name here' # root_name of WFK files and of XSF files
+root_name = 'your file root name here' # root_name of WFK files and of XSF files < br / >
 xsf_number = 1 # XSF file number to be read in
 energy_level = 0.000 # Energy relative to the Fermi energy to be sampled
 width = 0.0005 # Search half the the width above and below the specified energy level
