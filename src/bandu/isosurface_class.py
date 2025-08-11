@@ -73,7 +73,7 @@ class Isosurface():
                     'must be defined'
                 ))
             else:
-                self.points, self.values, self.nbands = self._ReadAbinit(wfk_name)
+                self.points, self.values, self.nbands, self.ir_kpts = self._ReadAbinit(wfk_name)
         # check if information provided is in correct format
         if len(self.values.shape) > 2:
             raise ValueError((
@@ -173,13 +173,14 @@ class Isosurface():
     # method for reading kpoints and eigenvalues from ABINIT WFK file
     def _ReadAbinit(
         self, filename:str
-    )->tuple[np.ndarray,np.ndarray, list]:
+    )->tuple[np.ndarray,np.ndarray, list, np.ndarray]:
         # collect kpoints and eigenvalues from wfk file
         wfk = ar.AbinitWFK(filename=filename)
         eigs = []
         syms = np.array(wfk.symrel)
         nsym = wfk.nsym
         kpoints = np.array(wfk.kpts)
+        ir_kpts = kpoints
         nbands = wfk.bands[0]
         nkpt = wfk.nkpt
         self.fermi_energy = wfk.fermi
@@ -204,19 +205,17 @@ class Isosurface():
         bands = np.take(eigs, band_num, axis=1)
         shifts = brlzn.BZ(self.rec_latt).GetShifts(kpoints)
         kpoints = kpoints - shifts
+        ir_kpts -= shifts
+        ir_kpts = np.matmul(ir_kpts,self.rec_latt)
         wfk = wc.WFK(symrel=syms, nsym=nsym, nbands=len(band_num), nkpt=nkpt)
         all_kpts = np.zeros((1,3))
         all_eigs = np.zeros((1,bands.shape[1]))
         # symmetrize kpoints
         for i, kpt in enumerate(kpoints):
-            sym_kpts, _ = wfk.Symmetrize(
+            unique_kpts, _ = wfk.Symmetrize(
                 points=kpt,
                 reciprocal=True,
-                unique=False
             )
-            unique_kpts = []
-            dupes, unique_inds = wfk._FindOrbit(sym_kpts=sym_kpts)
-            unique_kpts = np.array([sym_kpts[ind,:] for i, ind in enumerate(unique_inds) if i not in dupes])
             all_kpts = np.concatenate((all_kpts, unique_kpts), axis=0)
             new_eigs = np.repeat(bands[i,:].reshape((1,-1)), unique_kpts.shape[0], axis=0)
             all_eigs = np.concatenate((all_eigs, new_eigs), axis=0)
@@ -227,4 +226,4 @@ class Isosurface():
             print(kpoints.shape)
             print(bands.shape)
             raise SystemExit()
-        return kpoints, bands, band_num
+        return kpoints, bands, band_num, ir_kpts
