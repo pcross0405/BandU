@@ -135,7 +135,7 @@ class Plotter():
         colormap:str|ListedColormap='plasma', color:str='white', bz_show:bool=True, bz_width:int=3, arrow:list=[], 
         show_endpoints:bool=False, arrow_color:str='yellow', periodic_arrow:list=[], camera_position:list=[], 
         cross_section:list=[], cross_width:float=0.1, linear:bool=False, two_dim:bool=True, show_bands:float|list=1.0,
-        surface_vals:list|None=None
+        surface_vals:list|None=None, show_ird_points:bool=False
     ):
         '''
         Method for plotting contours made from the Isosurface object
@@ -288,6 +288,10 @@ class Plotter():
                     color=color,
                     show_scalar_bar=True,
                 )
+        # plot irreducible kpoints
+        if show_ird_points:
+            pts = pv.PolyData(self.isosurface.ir_kpts)
+            self.p.add_mesh(pts.points, color='black')
         # plot points that are used to construct isosurface
         if show_points:
             pts = pv.PolyData(self.isosurface.points)
@@ -366,8 +370,8 @@ class Plotter():
         # initialize array for overlap values
         overlap_vals = np.zeros((1,num_bands), dtype=float)
         # loop over bands
-        for i, _ in enumerate(self.isosurface.nbands):
-            wfk = ir_wfk.GridWFK()
+        for i, band in enumerate(self.isosurface.nbands):
+            wfk = ir_wfk.GridWFK(band_index=band)
             wfk = wfk.FFT()
             wfk = wfk.Normalize()
             overlap = np.sum(np.conj(bandu.wfk_coeffs)*wfk.wfk_coeffs)
@@ -458,8 +462,9 @@ class Plotter():
             symrel = fermi_wfk.symrel
             nsym = fermi_wfk.nsym
             kpts = fermi_wfk.kpts
-            permute_overlaps = wc.WFK(symrel=np.array(symrel), nsym=nsym)
-            _, overlaps = permute_overlaps.Symmetrize(points=np.array(kpts), values=overlaps)
+            permute_overlaps = wc.WFK(symrel=np.array(symrel), nsym=nsym, nbands=nband)
+            new_pts, overlaps = permute_overlaps.Symmetrize(points=np.array(kpts), values=overlaps, reciprocal=True)
+            self.isosurface.points = new_pts
         # interpolate overlap values for smooth coloration
         scalars = []
         for i in range(overlaps.shape[1]):
