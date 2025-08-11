@@ -113,11 +113,11 @@ class BandU():
                 funcs.append(sym_coeffs)
             self.found_states -= 1
         else:
-            # shift point baxk into Brillouin Zone as necessary
+            # shift point back into Brillouin Zone as necessary
             rec_latt = state.Real2Reciprocal()
             shift = brlzn.BZ(rec_latt=rec_latt).GetShifts(state.kpoints)
             state.pw_indices += shift
-            state.kpoints -= shift
+            state.kpoints = state.kpoints.reshape((-1,3)) - shift
             funcs.append(state)
         # apply desired transformations
         for wfk in funcs:
