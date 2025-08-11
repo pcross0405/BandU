@@ -883,12 +883,121 @@ class Abinit10WFK():
 #----------------------------------------------------- END CLASS -----------------------------------------------------#
 #---------------------------------------------------------------------------------------------------------------------#
 
+class AbinitNetCDF():
+    def __init__(
+        self, filename:str
+    ):
+        print('WFK found with netCDF4 format')
+        self.filename = filename
+        self.dataset = self._GetDataset()
+        self.kpts:np.ndarray = self.dataset.variables['reduced_coordinates_of_kpoints'][:]
+        self.nkpt:int = self.dataset.dimensions['number_of_kpoints'].size
+        self.xred:np.ndarray = self.dataset.variables['reduced_atom_positions'][:]
+        self.natom:int = self.dataset.dimensions['number_of_atoms'].size
+        self.tnons:np.ndarray = self.dataset.variables['reduced_symmetry_translations'][:]
+        self.symrel:np.ndarray = self.dataset.variables['reduced_symmetry_matrices'][:]
+        self.symrel = np.array([op.T for op in self.symrel])
+        self.nsym:int = self.dataset.dimensions['number_of_symmetry_operations'].size
+        self.fermi:float = self.dataset['fermi_energy'][:]
+        self.real_lattice:np.ndarray = self.dataset['primitive_vectors'][:]
+        self.real_lattice *= 0.529177
+        self.ngfftx:int = self.dataset.dimensions['number_of_grid_points_vector1'].size
+        self.ngffty:int = self.dataset.dimensions['number_of_grid_points_vector2'].size
+        self.ngfftz:int = self.dataset.dimensions['number_of_grid_points_vector3'].size
+        self.nband:int = int(self.dataset.dimensions['bantot'].size / self.nkpt)
+        self.typat:list = self.dataset.variables['atom_species'][:].tolist()
+        self.zion:np.ndarray = self.dataset.variables['atomic_numbers'][:]
+        self.znucltypat:list = [int(self.zion[i-1]) for i in self.typat]
+        self.bands = [self.nband]
+#---------------------------------------------------------------------------------------------------------------------#
+#------------------------------------------------------ METHODS ------------------------------------------------------#
+#---------------------------------------------------------------------------------------------------------------------#
+    # create netCDF dataset
+    def _GetDataset(
+        self
+    ):
+        from netCDF4 import Dataset
+        return Dataset(self.filename,format='NETCDF4')
+    #-----------------------------------------------------------------------------------------------------------------#
+    # fetch wavefunction coefficients from netcdf dataset
+    def ReadWFK(
+        self, energy_level:float=np.nan, width:float=np.nan
+    )->Generator[wc.WFK, None, None]:
+        eigs:np.ndarray = self.dataset.variables['eigenvalues'][:][0]
+        pw_inds:np.ndarray = self.dataset.variables['reduced_coordinates_of_plane_waves'][:]
+        # restructure wavefunction coefficients
+        coeffs:np.ndarray = self.dataset.variables['coefficients_of_wavefunctions'][:][0]
+        for i, kpt in enumerate(coeffs):
+            print(f'Reading kpoint {i+1} of {self.nkpt}', end='\r')
+            kpt_coeffs = []
+            # format plane wave indices
+            kpt_pw_inds = pw_inds[i]
+            kpt_pw_inds = kpt_pw_inds[~kpt_pw_inds.mask]
+            kpt_pw_inds = kpt_pw_inds.reshape((-1,3))
+            for band in kpt:
+                band = band[0]
+                band = band[~band.mask]
+                band = band.reshape((-1,2))
+                kpt_coeffs.append(band[:,0] + 1j*band[:,1])
+            yield wc.WFK(
+                eigenvalues=eigs[i,:], 
+                wfk_coeffs=np.array(kpt_coeffs),
+                pw_indices=kpt_pw_inds,
+                kpoints=self.kpts[i],
+                nkpt=self.nkpt,
+                nbands=self.nband,
+                ngfftx=self.ngfftx,
+                ngffty=self.ngffty,
+                ngfftz=self.ngfftz,
+                symrel=self.symrel,
+                nsym=self.nsym,
+                lattice=self.real_lattice,
+                natom=self.natom,
+                xred=self.xred,
+                typat=self.typat,
+                znucltypat=self.znucltypat,
+                fermi_energy=self.fermi,
+                non_symm_vecs=self.tnons
+            )
+    #-----------------------------------------------------------------------------------------------------------------#
+    # fetch eigenvalues from netcdf dataset
+    def ReadEigenvalues(
+        self, energy_level:float=np.nan, width:float=np.nan
+    )->Generator[wc.WFK, None, None]:
+        eigs:np.ndarray = self.dataset.variables['eigenvalues'][:][0]
+        for i, kpt in enumerate(self.kpts):
+            print(f'Reading kpoint {i+1} of {self.nkpt}', end='\r')
+            yield wc.WFK(
+                eigenvalues=eigs[i,:], 
+                kpoints=kpt,
+                nkpt=self.nkpt,
+                nbands=self.nband,
+                ngfftx=self.ngfftx,
+                ngffty=self.ngffty,
+                ngfftz=self.ngfftz,
+                symrel=self.symrel,
+                nsym=self.nsym,
+                lattice=self.real_lattice,
+                natom=self.natom,
+                xred=self.xred,
+                typat=self.typat,
+                znucltypat=self.znucltypat,
+                fermi_energy=self.fermi,
+                non_symm_vecs=self.tnons
+            )        
+
+#---------------------------------------------------------------------------------------------------------------------#
+#----------------------------------------------------- END CLASS -----------------------------------------------------#
+#---------------------------------------------------------------------------------------------------------------------#
+
 def AbinitWFK(
     filename:str
-)->Union[Abinit10WFK, Abinit7WFK]:
+)->Union[Abinit10WFK, Abinit7WFK, AbinitNetCDF]:
     '''
     A function for identifying ABINIT version and constructing respective AbinitWFK object.
     '''
+    if filename.endswith('.nc'):
+        return AbinitNetCDF(filename)
     wfk = open(filename, 'rb')
     wfk.read(4)
     version = wfk.read(6).decode()
