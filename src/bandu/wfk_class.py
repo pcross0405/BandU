@@ -354,8 +354,10 @@ class WFK():
                 sym_vals[i*ind_len:(i+1)*ind_len,:] = values
         # points overlap on at edges of each symmetric block, remove duplicates
         if unique:
-            sym_pts, unique_inds = np.unique(sym_pts, return_index=True, axis=0)
-            sym_vals = np.take(sym_vals, unique_inds, axis=0)
+            dupes, unique_inds = self._FindOrbit(sym_pts)
+            unique_kpts = np.array([sym_pts[ind,:] for i, ind in enumerate(unique_inds) if i not in dupes])
+            unique_vals = np.array([sym_vals[ind,:] for i, ind in enumerate(unique_inds) if i not in dupes])
+            return unique_kpts, unique_vals
         return sym_pts, sym_vals
     #-----------------------------------------------------------------------------------------------------------------#
     # method for creating symmetrically equivalent functions at specified kpoint
