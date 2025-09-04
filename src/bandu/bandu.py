@@ -51,7 +51,6 @@ class BandU():
         self.low_mem:bool=low_mem
         self.found_states:int=0
         self.bandu_fxns:list[wc.WFK]=[]
-        self.duped_states:int=0
         self.plot=plot
         # find all states within width
         self._FindStates(energy_level, width, wfks)
@@ -62,7 +61,7 @@ class BandU():
         if plot:
             self._PlotEigs(principal_vals)
         # normalize bandu functions
-        for i in range(self.found_states + self.duped_states):
+        for i in range(self.found_states):
             self.bandu_fxns[i] = self.bandu_fxns[i].Normalize()
         # compute ratios
         omega_vals, omega_check = self._CheckOmega()
@@ -169,7 +168,7 @@ class BandU():
     def _PrincipalComponents(
         self
     )->np.ndarray:
-        total_states = self.found_states + self.duped_states
+        total_states = self.found_states
         # organize wfk coefficients 
         x = self.bandu_fxns[0].ngfftx
         y = self.bandu_fxns[0].ngffty
@@ -196,7 +195,7 @@ class BandU():
     def _CheckOmega(
         self
     )->tuple[np.ndarray, np.ndarray]:
-        total_states = self.found_states + self.duped_states
+        total_states = self.found_states
         omega_vals = np.zeros((total_states, 3), dtype=float)
         vals = np.linspace(start=-0.01, stop=0.01, num=3)
         for i, val in enumerate(vals):
@@ -209,7 +208,7 @@ class BandU():
         omega_diff1 = (omega_vals[:,1] - omega_vals[:,0])
         omega_diff2 = (omega_vals[:,2] - omega_vals[:,1])
         omega_check = np.sign(omega_diff1) + np.sign(omega_diff2)
-        return omega_vals, omega_check
+        return omega_vals[:,1], omega_check
     #-----------------------------------------------------------------------------------------------------------------#
     # plot eigenvalues from PCA
     def _PlotEigs(
@@ -243,7 +242,7 @@ class BandU():
     def ToXSF(
         self, nums:list[int]=[], xsf_name:str='Principal_orbital_component'
     ):
-        total_states = self.found_states + self.duped_states
+        total_states = self.found_states
         if nums is []:
             nums = [0,total_states-1]
         else:
