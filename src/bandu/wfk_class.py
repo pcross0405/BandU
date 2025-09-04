@@ -376,8 +376,6 @@ class WFK():
             Choose which band to pull coefficients from (indexed starting from zero).
             Default assumes coefficients from a single band are provided (-1).
         '''
-        # first check for time reversal symmetry
-        self._CheckTimeRevSym()
         # find symmetric kpoints
         kpoint = kpoint.reshape((1,3))
         sym_kpoints, _ = self.Symmetrize(kpoint, unique=False, reciprocal=True)
