@@ -193,9 +193,23 @@ class Abinit7WFK():
         print('WFK header read')
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
+    # check for time reversal symmetry
+    def _CheckTimeRev(
+        self
+    ):
+        # if system is centrosymmetric, do not double reciprocal symmetry operations
+        if True in [np.array_equal(-np.identity(3),mat) for mat in self.symrel]:
+            self.time_reversal = False
+        else:
+            self.time_reversal = True
+            print((
+            'Noncentrosymmetric system identified, assuming time reversal symmetry\n'
+            'To change this, set "check_time_rev" keyword to False when calling ReadWFK() or ReadEigenvalues()'
+            ))
+    #-----------------------------------------------------------------------------------------------------------------#
     # method to read entire body of abinit version 7 wavefunction file
     def ReadWFK(
-        self, energy_level=np.nan, width=np.nan
+        self, energy_level=np.nan, width=np.nan, check_time_rev:bool=True
     )->Generator[wc.WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v7 WFK file
@@ -212,6 +226,12 @@ class Abinit7WFK():
         Total range is equal to width, so look width/2 above and below energy_level
         If not defined but energy_level is defined, default is 0.005 Hartree
         '''
+        # check for time reversal symmetry
+        if check_time_rev:
+            self._CheckTimeRev()
+        else:
+            self.time_reversal = False
+        # read wfk file
         wfk = open(self.filename, 'rb')
         skip = True
         if energy_level is np.nan:
@@ -322,16 +342,23 @@ class Abinit7WFK():
             typat=self.typat,
             znucltypat=self.znucltypat,
             fermi_energy=self.fermi,
-            non_symm_vecs=np.array(self.tnons)
+            non_symm_vecs=np.array(self.tnons),
+            time_reversal=self.time_reversal
         )
     #-----------------------------------------------------------------------------------------------------------------#
     # method to read only eigenvalues from body of abinit version 7 wavefunction file
     def ReadEigenvalues(
-        self
+        self, check_time_rev:bool=True
     )->Generator[wc.WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v7 WFK file.
         '''
+        # check for time reversal symmetry
+        if check_time_rev:
+            self._CheckTimeRev()
+        else:
+            self.time_reversal = False
+        # read wfk
         wfk = open(self.filename, 'rb')
         #-----------#
         # skip header
@@ -378,7 +405,8 @@ class Abinit7WFK():
                     typat=self.typat,
                     znucltypat=self.znucltypat,
                     fermi_energy=self.fermi,
-                    non_symm_vecs=np.array(self.tnons)
+                    non_symm_vecs=np.array(self.tnons),
+                    time_reversal=self.time_reversal
                 )
         print('WFK body read')
         wfk.close()
@@ -648,9 +676,23 @@ class Abinit10WFK():
         print('WFK header read')
         wfk.close()
     #-----------------------------------------------------------------------------------------------------------------#
+    # check for time reversal symmetry
+    def _CheckTimeRev(
+        self
+    ):
+        # if system is centrosymmetric, do not double reciprocal symmetry operations
+        if True in [np.array_equal(-np.identity(3),mat) for mat in self.symrel]:
+            self.time_reversal = False
+        else:
+            self.time_reversal = True
+            print((
+            'Noncentrosymmetric system identified, assuming time reversal symmetry\n'
+            'To change this, set "check_time_rev" keyword to False when calling ReadWFK() or ReadEigenvalues()'
+            ))
+    #-----------------------------------------------------------------------------------------------------------------#
     # method to read entire body of abinit version 7 wavefunction file
     def ReadWFK(
-        self, energy_level=np.nan, width=np.nan
+        self, energy_level=np.nan, width=np.nan, check_time_rev:bool=True
     )->Generator[wc.WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v10 WFK file.
@@ -667,6 +709,12 @@ class Abinit10WFK():
         Total range is equal to width, so look width/2 above and below energy_level
         If not defined but energy_level is defined, default is 0.005 Hartree
         '''
+        # check for time reversal symmetry
+        if check_time_rev:
+            self._CheckTimeRev()
+        else:
+            self.time_reversal = False
+        # read wfk
         wfk = open(self.filename, 'rb')
         skip = True
         if energy_level is np.nan:
@@ -798,16 +846,23 @@ class Abinit10WFK():
             typat=self.typat,
             znucltypat=self.znucltypat,
             fermi_energy=self.fermi,
-            non_symm_vecs=np.array(self.tnons)
+            non_symm_vecs=np.array(self.tnons),
+            time_reversal=self.time_reversal
         )
     #-----------------------------------------------------------------------------------------------------------------#
     # method to read only eigenvalues from body of abinit version 10 wavefunction file
     def ReadEigenvalues(
-        self
+        self, check_time_rev:bool=True
     )->Generator[wc.WFK, None, None]:
         '''
         Method that constructs WFK objects from ABINIT v10 WFK file.
         '''
+        # check for time reversal symmetry
+        if check_time_rev:
+            self._CheckTimeRev()
+        else:
+            self.time_reversal = False
+        # read wfk
         wfk = open(self.filename, 'rb')
         #-----------#
         # skip header
@@ -874,7 +929,8 @@ class Abinit10WFK():
                     typat=self.typat,
                     znucltypat=self.znucltypat,
                     fermi_energy=self.fermi,
-                    non_symm_vecs=np.array(self.tnons)
+                    non_symm_vecs=np.array(self.tnons),
+                    time_reversal=self.time_reversal
                 )
         print('WFK body read')
         wfk.close()
@@ -907,7 +963,11 @@ class AbinitNetCDF():
         self.nband:int = int(self.dataset.dimensions['bantot'].size / self.nkpt)
         self.typat:list = self.dataset.variables['atom_species'][:].tolist()
         self.zion:np.ndarray = self.dataset.variables['atomic_numbers'][:]
-        self.znucltypat:list = [int(self.zion[i-1]) for i in self.typat]
+        _all_ions = [int(self.zion[i-1]) for i in self.typat]
+        self.znucltypat:list = []
+        for i in _all_ions:
+            if i not in self.znucltypat:
+                self.znucltypat.append(i)
         self.bands = [self.nband]
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
@@ -919,31 +979,52 @@ class AbinitNetCDF():
         from netCDF4 import Dataset
         return Dataset(self.filename,format='NETCDF4')
     #-----------------------------------------------------------------------------------------------------------------#
+    # check for time reversal symmetry
+    def _CheckTimeRev(
+        self
+    ):
+        # if system is centrosymmetric, do not double reciprocal symmetry operations
+        if True in [np.array_equal(-np.identity(3),mat) for mat in self.symrel]:
+            self.time_reversal = False
+        else:
+            self.time_reversal = True
+            print((
+            'Noncentrosymmetric system identified, assuming time reversal symmetry\n'
+            'To change this, set "check_time_rev" keyword to False when calling ReadWFK() or ReadEigenvalues()'
+            ))
+    #-----------------------------------------------------------------------------------------------------------------#
     # fetch wavefunction coefficients from netcdf dataset
     def ReadWFK(
-        self, energy_level:float=np.nan, width:float=np.nan
+        self, energy_level:float=np.nan, width:float=np.nan, check_time_rev:bool=True
     )->Generator[wc.WFK, None, None]:
+        # check for time reversal symmetry
+        if check_time_rev:
+            self._CheckTimeRev()
+        else:
+            self.time_reversal = False
         eigs:np.ndarray = self.dataset.variables['eigenvalues'][:][0]
         pw_inds:np.ndarray = self.dataset.variables['reduced_coordinates_of_plane_waves'][:]
         # restructure wavefunction coefficients
-        coeffs:np.ndarray = self.dataset.variables['coefficients_of_wavefunctions'][:][0]
-        for i, kpt in enumerate(coeffs):
-            print(f'Reading kpoint {i+1} of {self.nkpt}', end='\r')
+        for kpt in range(self.nkpt):
+            print(f'Reading kpoint {kpt+1} of {self.nkpt}', end='\r')
             kpt_coeffs = []
             # format plane wave indices
-            kpt_pw_inds = pw_inds[i]
+            kpt_pw_inds = pw_inds[kpt]
             kpt_pw_inds = kpt_pw_inds[~kpt_pw_inds.mask]
             kpt_pw_inds = kpt_pw_inds.reshape((-1,3))
-            for band in kpt:
+            kpt_pw_inds = np.ma.getdata(kpt_pw_inds)
+            coeffs = self.dataset.variables['coefficients_of_wavefunctions'][0,kpt]
+            for band in coeffs:
                 band = band[0]
                 band = band[~band.mask]
                 band = band.reshape((-1,2))
+                band = np.ma.getdata(band)
                 kpt_coeffs.append(band[:,0] + 1j*band[:,1])
             yield wc.WFK(
-                eigenvalues=eigs[i,:], 
+                eigenvalues=eigs[kpt,:], 
                 wfk_coeffs=np.array(kpt_coeffs),
                 pw_indices=kpt_pw_inds,
-                kpoints=self.kpts[i],
+                kpoints=self.kpts[kpt],
                 nkpt=self.nkpt,
                 nbands=self.nband,
                 ngfftx=self.ngfftx,
@@ -957,13 +1038,19 @@ class AbinitNetCDF():
                 typat=self.typat,
                 znucltypat=self.znucltypat,
                 fermi_energy=self.fermi,
-                non_symm_vecs=self.tnons
+                non_symm_vecs=self.tnons,
+                time_reversal=self.time_reversal
             )
     #-----------------------------------------------------------------------------------------------------------------#
     # fetch eigenvalues from netcdf dataset
     def ReadEigenvalues(
-        self, energy_level:float=np.nan, width:float=np.nan
+        self, energy_level:float=np.nan, width:float=np.nan, check_time_rev:bool=True
     )->Generator[wc.WFK, None, None]:
+        # check for time reversal symmetry
+        if check_time_rev:
+            self._CheckTimeRev()
+        else:
+            self.time_reversal = False
         eigs:np.ndarray = self.dataset.variables['eigenvalues'][:][0]
         for i, kpt in enumerate(self.kpts):
             print(f'Reading kpoint {i+1} of {self.nkpt}', end='\r')
@@ -983,7 +1070,8 @@ class AbinitNetCDF():
                 typat=self.typat,
                 znucltypat=self.znucltypat,
                 fermi_energy=self.fermi,
-                non_symm_vecs=self.tnons
+                non_symm_vecs=self.tnons,
+                time_reversal=self.time_reversal
             )        
 
 #---------------------------------------------------------------------------------------------------------------------#
