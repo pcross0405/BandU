@@ -462,9 +462,20 @@ class Plotter():
             symrel = fermi_wfk.symrel
             nsym = fermi_wfk.nsym
             kpts = fermi_wfk.kpts
-            permute_overlaps = wc.WFK(symrel=np.array(symrel), nsym=nsym, nbands=nband)
-            new_pts, overlaps = permute_overlaps.Symmetrize(points=np.array(kpts), values=overlaps, reciprocal=True)
-            self.isosurface.points = new_pts
+            all_kpts = np.zeros((1,3))
+            all_overlaps = np.zeros((1,nband))
+            new_wfk = wc.WFK(symrel=np.array(symrel), nsym=nsym, nbands=nband)
+            for i, kpt in enumerate(kpts):
+                unique_kpts, _ = new_wfk.Symmetrize(
+                    points=kpt,
+                    reciprocal=True
+                )
+                all_kpts = np.concatenate((all_kpts, unique_kpts), axis=0)
+                new_overlaps = np.repeat(overlaps[i,:].reshape((1,-1)), unique_kpts.shape[0], axis=0)
+                all_overlaps = np.concatenate((all_overlaps, new_overlaps), axis=0)
+            kpts = np.delete(all_kpts, 0, axis=0)
+            overlaps = np.delete(all_overlaps, 0, axis=0)
+            self.isosurface.points = np.matmul(kpts, self.isosurface.rec_latt)
         # interpolate overlap values for smooth coloration
         scalars = []
         for i in range(overlaps.shape[1]):
