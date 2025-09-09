@@ -138,16 +138,16 @@ class WFK():
             If nothing is passed, it is assumed the coefficients of a single band are supplied.
         '''
         # initialize 3D grid
-        gridded_wfk = np.zeros((self.ngfftz, self.ngfftx, self.ngffty), dtype=complex)
+        gridded_wfk = np.zeros((self.ngfftz, self.ngffty, self.ngfftx), dtype=complex)
         # update grid with wfk coefficients
         for k, kpt in enumerate(self.pw_indices):
             kx = kpt[0]
             ky = kpt[1]
             kz = kpt[2]
             if band_index >= 0:
-                gridded_wfk[kz, kx, ky] = self.wfk_coeffs[band_index][k]
+                gridded_wfk[kz, ky, kx] = self.wfk_coeffs[band_index][k]
             else:
-                gridded_wfk[kz, kx, ky] = self.wfk_coeffs[k]
+                gridded_wfk[kz, ky, kx] = self.wfk_coeffs[k]
         new_WFK = copy(self)
         new_WFK.wfk_coeffs = gridded_wfk
         return new_WFK
@@ -166,9 +166,9 @@ class WFK():
             If nothing is passed, it is assumed the coefficients of a single band are supplied.
         '''
         # check if coefficients are gridded before undoing grid format
-        if self.wfk_coeffs.shape != (self.ngfftz,self.ngfftx,self.ngffty):
+        if self.wfk_coeffs.shape != (self.ngfftz,self.ngffty,self.ngfftx):
             raise ValueError((
-                f'Plane wave coefficients must be in 3D grid with shape ({self.ngfftz}, {self.ngfftx}, {self.ngffty})'
+                f'Plane wave coefficients must be in 3D grid with shape ({self.ngfftz}, {self.ngffty}, {self.ngfftx})'
                 ' in order to remove the gridded format'
             ))
         if band_index >= 0:
@@ -192,7 +192,7 @@ class WFK():
         # Fourier transform reciprocal grid to real space grid
         real_coeffs = fftn(self.wfk_coeffs, norm='ortho')
         new_WFK = copy(self)
-        new_WFK.wfk_coeffs = np.array(real_coeffs).reshape((self.ngfftz, self.ngfftx, self.ngffty))
+        new_WFK.wfk_coeffs = np.array(real_coeffs).reshape((self.ngfftz, self.ngffty, self.ngfftx))
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method transforming real space wfks to reciprocal space
@@ -206,7 +206,7 @@ class WFK():
         # Fourier transform real space grid to reciprocal space grid
         reciprocal_coeffs = ifftn(self.wfk_coeffs, norm='ortho')
         new_WFK = copy(self)
-        new_WFK.wfk_coeffs = reciprocal_coeffs
+        new_WFK.wfk_coeffs = np.array(reciprocal_coeffs).reshape((self.ngfftz,self.ngffty,self.ngfftx))
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method for normalizing wfks
@@ -430,34 +430,34 @@ class WFK():
         # append zeros to ends of all axes in grid_wfk
         # zeros get replaced by values at beginning of each axis
         # this repetition is required by XSF format
-        if np.shape(self.wfk_coeffs) != (self.ngfftz, self.ngfftx, self.ngffty):
+        if np.shape(self.wfk_coeffs) != (self.ngfftz, self.ngffty, self.ngfftx):
             raise ValueError(
                 f'''Passed array is not the correct shape:
-                Expected: ({self.ngfftz}, {self.ngfftx}, {self.ngffty}),
+                Expected: ({self.ngfftz}, {self.ngffty}, {self.ngfftx}),
                 Received: {np.shape(self.wfk_coeffs)}
             ''')
         else:
             grid_wfk = self.wfk_coeffs
-        grid_wfk = np.append(grid_wfk, np.zeros((1, self.ngfftx, self.ngffty)), axis=0)
-        grid_wfk = np.append(grid_wfk, np.zeros((self.ngfftz+1, 1, self.ngffty)), axis=1)
-        grid_wfk = np.append(grid_wfk, np.zeros((self.ngfftz+1, self.ngfftx+1, 1)), axis=2)
+        grid_wfk = np.append(grid_wfk, np.zeros((1, self.ngffty, self.ngfftx)), axis=0)
+        grid_wfk = np.append(grid_wfk, np.zeros((self.ngfftz+1, 1, self.ngfftx)), axis=1)
+        grid_wfk = np.append(grid_wfk, np.zeros((self.ngfftz+1, self.ngffty+1, 1)), axis=2)
         for x in range(self.ngfftx+1):
             for y in range(self.ngffty+1):
                 for z in range(self.ngfftz+1):
                     if x == self.ngfftx:
-                        grid_wfk[z][x][y] = grid_wfk[z][0][y]
+                        grid_wfk[z][y][x] = grid_wfk[z][y][0]
                     if y == self.ngffty:
-                        grid_wfk[z][x][y] = grid_wfk[z][x][0]
+                        grid_wfk[z][y][x] = grid_wfk[z][0][x]
                     if z == self.ngfftz:
-                        grid_wfk[z][x][y] = grid_wfk[0][x][y]
+                        grid_wfk[z][y][x] = grid_wfk[0][x][y]
                     if x == self.ngfftx and y == self.ngffty:
-                        grid_wfk[z][x][y] = grid_wfk[z][0][0]
+                        grid_wfk[z][y][x] = grid_wfk[z][0][0]
                     if x == self.ngfftx and z == self.ngfftz:
-                        grid_wfk[z][x][y] = grid_wfk[0][0][y]
+                        grid_wfk[z][y][x] = grid_wfk[0][y][0]
                     if z == self.ngfftz and y == self.ngffty:
-                        grid_wfk[z][x][y] = grid_wfk[0][x][0]
+                        grid_wfk[z][y][x] = grid_wfk[0][0][x]
                     if x == self.ngfftx and y == self.ngffty and z == self.ngfftz:
-                        grid_wfk[z][x][y] = grid_wfk[0][0][0]
+                        grid_wfk[z][y][x] = grid_wfk[0][0][0]
         new_WFK = copy(self)
         new_WFK.wfk_coeffs = grid_wfk
         new_WFK.ngfftx += 1
@@ -476,16 +476,16 @@ class WFK():
         # to_be_del will be used to remove all extra data points added for XSF formatting
         to_be_del = np.ones((self.ngfftz, self.ngfftx, self.ngffty), dtype=bool)
         for z in range(self.ngfftz):
-            for x in range(self.ngfftx):
-                for y in range(self.ngffty):
+            for x in range(self.ngffty):
+                for y in range(self.ngfftx):
                     # any time you reach the last density point it is a repeat of the first point
                     # remove the end points along each axis
                     if y == self.ngffty - 1 or x == self.ngfftx - 1 or z == self.ngfftz - 1:
-                        to_be_del[z,x,y] = False
+                        to_be_del[z,y,x] = False
         # remove xsf entries from array
         grid = grid[to_be_del]
         # restore grid shape
-        grid = grid.reshape((self.ngfftz-1, self.ngfftx-1, self.ngffty-1))
+        grid = grid.reshape((self.ngfftz-1, self.ngffty-1, self.ngfftx-1))
         new_WFK = copy(self)
         new_WFK.wfk_coeffs = grid
         new_WFK.ngfftx -= 1
@@ -539,13 +539,13 @@ class WFK():
             print(f'{self.lattice[2,0]} {self.lattice[2,1]} {self.lattice[2,2]}', file=xsf)
             count = 0
             for z in range(self.ngfftz):
-                for x in range(self.ngfftx):
-                    for y in range(self.ngffty):
+                for y in range(self.ngffty):
+                    for x in range(self.ngfftx):
                         count += 1
                         if _component:
-                            print(self.wfk_coeffs[z,x,y].real, file=xsf, end=' ')
+                            print(self.wfk_coeffs[z,y,x].real, file=xsf, end=' ')
                         else:
-                            print(self.wfk_coeffs[z,x,y].imag, file=xsf, end=' ')
+                            print(self.wfk_coeffs[z,y,x].imag, file=xsf, end=' ')
                         if count == 6:
                             count = 0
                             print('\n', file=xsf, end='')
