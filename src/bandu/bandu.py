@@ -268,6 +268,6 @@ class BandU():
         for i in range(nums[0]-1, nums[1]):
             file_name = xsf_name + f'_{i+1}'
             wfk = copy(self.bandu_fxns[i])
-            wfk.wfk_coeffs = wfk.wfk_coeffs.reshape((z,x,y))
+            wfk.wfk_coeffs = wfk.wfk_coeffs.reshape((z,y,x))
             wfk = wfk.XSFFormat()
             wfk.WriteXSF(xsf_file=file_name)
