@@ -42,6 +42,10 @@ class Isosurface():
         Default 0.05, this scales inversely with kpoint grid size (larger grids require smaller radius)
     sym_ops : np.ndarray
         Array of symmetry operations for generating points in Brillouin Zone
+    grid_stretch : float
+        Value that stretches grid that is used to interpolate bands
+        If portions of Brillouin Zone are cropped off, increase this value
+        Default is 0.15
 
     Methods
     -------
@@ -51,7 +55,8 @@ class Isosurface():
     def __init__(
         self, points:np.ndarray=np.zeros(1), values:np.ndarray=np.zeros(1), rec_latt:np.ndarray=np.zeros(1), 
         wfk_name:str='', grid_steps:tuple=(50,50,50), fermi_energy:float=0.0, energy_level:float=0.0, 
-        width:float=0.005, radius:float=0.05, nbands:list[int]=[], sym_ops:np.ndarray=np.zeros(1), _debug:bool=False
+        width:float=0.005, radius:float=0.05, nbands:list[int]=[], sym_ops:np.ndarray=np.zeros(1), 
+        grid_stretch:float=0.15
     )->None:
         # define attributes
         self.points=points
@@ -64,9 +69,9 @@ class Isosurface():
         self.radius=radius
         self.nbands=nbands
         self.sym_ops=sym_ops
-        self._debug=_debug
+        self.grid_stretch=grid_stretch
         # check if enough information is provided to class to construct isosurfaces
-        if self.points.all() == np.zeros(1) and self.values.all() == np.zeros(1):
+        if self.points.shape == (1,) and self.values.shape == (1,):
             if wfk_name == '':
                 raise ValueError((
                     'Either the points and the values attributes must be defined or the wfk_name attribute '
@@ -126,8 +131,18 @@ class Isosurface():
         dimy = self.grid_steps[1]
         dimz = self.grid_steps[2]
         grid = pv.ImageData()
-        grid.origin = (xmin-0.035, ymin-0.035, zmin-0.035)
-        grid.spacing = (2*(xmax+0.05)/dimx, 2*(ymax+0.05)/dimy, 2*(zmax+0.05)/dimz)
+        stretch_factor = self.grid_stretch
+        dim_stretch = [2*stretch_factor/dim for dim in self.grid_steps]
+        grid.origin = (
+            xmin - 0.5*stretch_factor, 
+            ymin - 0.5*stretch_factor,
+            zmin - 0.5*stretch_factor
+        )
+        grid.spacing = (
+            2*xmax/dimx + dim_stretch[0], 
+            2*ymax/dimy + dim_stretch[1], 
+            2*zmax/dimz + dim_stretch[2]
+        )
         grid.dimensions = (dimx, dimy, dimz)
         return grid
     #-----------------------------------------------------------------------------------------------------------------#
@@ -185,22 +200,18 @@ class Isosurface():
         nkpt = wfk.nkpt
         self.fermi_energy = wfk.fermi
         self.rec_latt = wc.WFK(lattice=wfk.real_lattice).Real2Reciprocal()
-        if self._debug:
-            eigs = np.zeros((nkpt,10))
-            band_num = [1,2,3,4,5]
-        else:
-            for wfk_obj in wfk.ReadEigenvalues():
-                eigs.append(wfk_obj.eigenvalues)
-            eigs = np.array(eigs).reshape((nkpt,nbands))
-            # look through eigenvalues to find which bands to contour
-            min_val = self.fermi_energy + self.energy_level - self.width/2
-            max_val = self.fermi_energy + self.energy_level + self.width/2
-            band_num = []
-            for i in range(nbands):
-                for eigval in eigs[:,i]:
-                    if min_val <= eigval <= max_val:
-                        band_num.append(i)
-                        break            
+        for wfk_obj in wfk.ReadEigenvalues():
+            eigs.append(wfk_obj.eigenvalues)
+        eigs = np.array(eigs).reshape((nkpt,nbands))
+        # look through eigenvalues to find which bands to contour
+        min_val = self.fermi_energy + self.energy_level - self.width/2
+        max_val = self.fermi_energy + self.energy_level + self.width/2
+        band_num = []
+        for i in range(nbands):
+            for eigval in eigs[:,i]:
+                if min_val <= eigval <= max_val:
+                    band_num.append(i)
+                    break            
         # return kpoints and bands of interest
         bands = np.take(eigs, band_num, axis=1)
         shifts = brlzn.BZ(self.rec_latt).GetShifts(kpoints)
@@ -222,8 +233,4 @@ class Isosurface():
         kpoints = np.delete(all_kpts, 0, axis=0)
         bands = np.delete(all_eigs, 0, axis=0)
         kpoints = np.matmul(kpoints, self.rec_latt)
-        if self._debug:
-            print(kpoints.shape)
-            print(bands.shape)
-            raise SystemExit()
         return kpoints, bands, band_num, ir_kpts
