@@ -123,7 +123,7 @@ class BandU():
             if self.grid:
                 wfk = wfk.GridWFK()
             if self.fft:
-                wfk = wfk.FFT()
+                wfk = wfk.IFFT()
             if self.norm:
                 wfk = wfk.Normalize()
             yield wfk
@@ -244,7 +244,7 @@ class BandU():
     ):
         total_states = self.found_states
         if nums is []:
-            nums = [0,total_states-1]
+            nums = [1,total_states]
         else:
             # check if list has only 2 elements
             if len(nums) != 2:
@@ -268,6 +268,6 @@ class BandU():
         for i in range(nums[0]-1, nums[1]):
             file_name = xsf_name + f'_{i+1}'
             wfk = copy(self.bandu_fxns[i])
-            wfk.wfk_coeffs = wfk.wfk_coeffs.reshape((z,y,x))
+            wfk.wfk_coeffs = wfk.wfk_coeffs.reshape((x,y,z))
             wfk = wfk.XSFFormat()
             wfk.WriteXSF(xsf_file=file_name)
