@@ -338,8 +338,8 @@ class Plotter():
         self.p.app.exec_() # type: ignore
     #-----------------------------------------------------------------------------------------------------------------#
     # method to compute bandu fxn and one electron wfk overlaps
-    def _Overlaps_w_sym(
-        self, ir_wfk:wc.WFK, bandu:wc.WFK, num_bands:int
+    def _OverlapsWithSym(
+        self, ir_wfk:wc.WFK, bandu:wc.WFK
     )->np.ndarray:
         # kpoint to symmetrically generate
         kpt = ir_wfk.kpoints
@@ -348,15 +348,14 @@ class Plotter():
         dupes, unique_inds = ir_wfk._FindOrbit(sym_kpoints)
         count = sum([1 for i, _ in enumerate(unique_inds) if i not in dupes])
         # initialize array for overlap values
+        num_bands = len(self.isosurface.nbands)
         overlap_vals = np.zeros((count,num_bands), dtype=float)
-        if self._debug:
-            return overlap_vals
         # loop over bands
         for i, band in enumerate(self.isosurface.nbands):
             # generate symmetric coefficients for each band
             for j, wfk in enumerate(ir_wfk.SymWFKs(kpoint=kpt, band=band)):
                 wfk = wfk.GridWFK()
-                wfk = wfk.FFT()
+                wfk = wfk.IFFT()
                 wfk = wfk.Normalize()
                 overlap = np.sum(np.conj(bandu.wfk_coeffs)*wfk.wfk_coeffs)
                 overlap = np.square(np.abs(overlap))
@@ -364,15 +363,16 @@ class Plotter():
         return overlap_vals
     #-----------------------------------------------------------------------------------------------------------------#
     # method to compute bandu fxn and one electron wfk overlaps
-    def _Overlaps_no_sym(
-        self, ir_wfk:wc.WFK, bandu:wc.WFK, num_bands:int
+    def _OverlapsNoSym(
+        self, ir_wfk:wc.WFK, bandu:wc.WFK
     )->np.ndarray:
         # initialize array for overlap values
+        num_bands = len(self.isosurface.nbands)
         overlap_vals = np.zeros((1,num_bands), dtype=float)
         # loop over bands
         for i, band in enumerate(self.isosurface.nbands):
             wfk = ir_wfk.GridWFK(band_index=band)
-            wfk = wfk.FFT()
+            wfk = wfk.IFFT()
             wfk = wfk.Normalize()
             overlap = np.sum(np.conj(bandu.wfk_coeffs)*wfk.wfk_coeffs)
             overlap = np.square(np.abs(overlap))
@@ -430,7 +430,7 @@ class Plotter():
         # read fermi surface wavefunction
         fermi_wfk = ar.AbinitWFK(filename=wfk_path)   
         # get number of bands
-        nband = len(self.isosurface.nbands)
+        nbands = len(self.isosurface.nbands)
         # paths to real and imaginary bandu xsf files
         real_path = xsf_path + '_real.xsf'
         imag_path = xsf_path + '_imag.xsf'
@@ -440,7 +440,7 @@ class Plotter():
         print('XSF read')
         # convert xsf to wfk object
         bandu_fxn = wc.WFK(
-            wfk_coeffs=real_fxn.ReadDensity() + 1j*imag_fxn.ReadDensity(),
+            wfk_coeffs=real_fxn.ReadGrid() + 1j*imag_fxn.ReadGrid(),
             ngfftx=real_fxn.ngfftx,
             ngffty=real_fxn.ngffty,
             ngfftz=real_fxn.ngfftz
@@ -450,9 +450,9 @@ class Plotter():
         # loop through fermi surface kpoints and calc overlap with bandu fxn
         for i, kpt in enumerate(fermi_wfk.ReadWFK()):
             if sym:
-                vals = self._Overlaps_w_sym(kpt, bandu_fxn, nband)
+                vals = self._OverlapsWithSym(kpt, bandu_fxn)
             else:
-                vals = self._Overlaps_no_sym(kpt, bandu_fxn, nband)
+                vals = self._OverlapsNoSym(kpt, bandu_fxn)
             if i == 0:
                 overlaps = vals
             else:
@@ -463,8 +463,8 @@ class Plotter():
             nsym = fermi_wfk.nsym
             kpts = fermi_wfk.kpts
             all_kpts = np.zeros((1,3))
-            all_overlaps = np.zeros((1,nband))
-            new_wfk = wc.WFK(symrel=np.array(symrel), nsym=nsym, nbands=nband)
+            all_overlaps = np.zeros((1,nbands))
+            new_wfk = wc.WFK(symrel=np.array(symrel), nsym=nsym, nbands=nbands)
             for i, kpt in enumerate(kpts):
                 unique_kpts, _ = new_wfk.Symmetrize(
                     points=kpt,
