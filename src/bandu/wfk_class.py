@@ -189,10 +189,10 @@ class WFK():
         Returns copy of WFK with wavefunction coefficients expressed in real space.
         Assumes existing wavefunction coefficients are expressed in reciprocal space.
         '''
-        # Fourier transform reciprocal grid to real space grid
-        real_coeffs = fftn(self.wfk_coeffs, norm='ortho')
+        # Fourier transform real grid to reciprocal grid
+        reciprocal_coeffs = fftn(self.wfk_coeffs, norm='ortho')
         new_WFK = copy(self)
-        new_WFK.wfk_coeffs = np.array(real_coeffs).reshape((self.ngfftx, self.ngffty, self.ngfftz))
+        new_WFK.wfk_coeffs = np.array(reciprocal_coeffs).reshape((self.ngfftx, self.ngffty, self.ngfftz))
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method transforming real space wfks to reciprocal space
@@ -203,10 +203,10 @@ class WFK():
         Returns copy of WFK with wavefunction coefficients in expressed in reciprocal space.
         Assumes existing wavefunction coefficients are expressed in real space. 
         '''
-        # Fourier transform real space grid to reciprocal space grid
-        reciprocal_coeffs = ifftn(self.wfk_coeffs, norm='ortho')
+        # Fourier transform reciprocal grid to real grid
+        real_coeffs = ifftn(self.wfk_coeffs, norm='ortho')
         new_WFK = copy(self)
-        new_WFK.wfk_coeffs = np.array(reciprocal_coeffs).reshape((self.ngfftx,self.ngffty,self.ngfftz))
+        new_WFK.wfk_coeffs = np.array(real_coeffs).reshape((self.ngfftx,self.ngffty,self.ngfftz))
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method for normalizing wfks
