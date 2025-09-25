@@ -40,7 +40,7 @@ class XSF():
                     del coord[0]
                     self.coords[atom,:] = coord
             # once density block is reached, get ngfft spacing and end init
-            if line.strip() == 'DATAGRID_3D_DENSITY':
+            if line.strip() == 'BEGIN_DATAGRID_3D_principal_orbital_component':
                 ngfft_spacing = self.xsf_lines[i+1].strip().split(' ')
                 ngfft_spacing = [int(val) for val in ngfft_spacing]
                 self.ngfftx = ngfft_spacing[0]
@@ -49,7 +49,7 @@ class XSF():
                 return None
     #-----------------------------------------------------------------------------------------------------------------#
     # method reading in BandU eigenfunction from XSF
-    def ReadDensity(
+    def ReadGrid(
         self
     )->np.ndarray:
         '''
@@ -63,22 +63,22 @@ class XSF():
         density_lines:list|np.ndarray=[]
         for i, line in enumerate(self.xsf_lines):
             # get density block, this assumes density is the end most data grid in the XSF
-            if line.strip() == 'DATAGRID_3D_DENSITY':
-                # density starts 6 lines down from DATAGRID_3D_DENSITY header
+            if line.strip() == 'BEGIN_DATAGRID_3D_principal_orbital_component':
+                # density starts 6 lines down from BEGIN_DATAGRID_3D_principal_orbital_component header
                 density_lines = self.xsf_lines[i+6:]
                 # last line indicates end of data block, remove it
                 del density_lines[-1]
-                # last entry in density is a string indicating end of density, remove it
+                # last entry in datagrid has a string indicating end of grid, remove it
                 last_line = density_lines[-1].strip().split(' ')
                 last_line = [val for val in last_line if val != 'END_DATAGRID_3D']
                 # cast line back to a single string
                 last_line = ' '.join(last_line)
                 density_lines[-1] = last_line
         if density_lines is []:
-            raise LookupError('3D density data not found in XSF file')
+            raise LookupError('3D grid data not found in XSF file')
         # convert density to 3D array of floats
         density_lines = [line.strip().split(' ') for line in density_lines]
         density_lines = [val for line in density_lines for val in line if val != '']
         density_lines = np.array(density_lines, dtype=float)
-        density_lines = density_lines.reshape((self.ngfftz, self.ngfftx, self.ngffty))
+        density_lines = density_lines.reshape((self.ngfftx, self.ngffty, self.ngfftz), order='F')
         return density_lines
