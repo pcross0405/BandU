@@ -963,11 +963,7 @@ class AbinitNetCDF():
         self.nband:int = int(self.dataset.dimensions['bantot'].size / self.nkpt)
         self.typat:list = self.dataset.variables['atom_species'][:].tolist()
         self.zion:np.ndarray = self.dataset.variables['atomic_numbers'][:]
-        _all_ions = [int(self.zion[i-1]) for i in self.typat]
-        self.znucltypat:list = []
-        for i in _all_ions:
-            if i not in self.znucltypat:
-                self.znucltypat.append(i)
+        self.znucltypat:list = [int(nuc) for nuc in self.zion]
         self.bands = [self.nband]
 #---------------------------------------------------------------------------------------------------------------------#
 #------------------------------------------------------ METHODS ------------------------------------------------------#
