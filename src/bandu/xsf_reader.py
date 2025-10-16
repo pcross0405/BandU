@@ -29,6 +29,7 @@ class XSF():
         '''
     # if xsf file is supplied, read in parameters
         self.xsf_file = xsf_file
+        self.datagrid = datagrid
         with open(xsf_file, 'r') as xsf:
             self.xsf_lines = xsf.readlines()
         self.lattice = np.zeros((3,3))
@@ -52,7 +53,7 @@ class XSF():
                     del coord[0]
                     self.coords[atom,:] = coord
             # once density block is reached, get ngfft spacing and end init
-            if line.strip() == datagrid:
+            if line.strip() == self.datagrid:
                 ngfft_spacing = self.xsf_lines[i+1].strip().split(' ')
                 ngfft_spacing = [int(val) for val in ngfft_spacing if val != '']
                 self.ngfftx = ngfft_spacing[0]
@@ -70,7 +71,7 @@ class XSF():
         density_lines:list|np.ndarray=[]
         for i, line in enumerate(self.xsf_lines):
             # get density block, this assumes density is the end most data grid in the XSF
-            if line.strip() == 'BEGIN_DATAGRID_3D_principal_orbital_component':
+            if line.strip() == self.datagrid:
                 # density starts 6 lines down from BEGIN_DATAGRID_3D_principal_orbital_component header
                 density_lines = self.xsf_lines[i+6:]
                 # last line indicates end of data block, remove it
