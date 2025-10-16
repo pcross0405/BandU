@@ -46,7 +46,7 @@ class XSF():
                 self.elements = []
                 for atom in range(self.natoms):
                     coord = self.xsf_lines[i+atom+2].strip().split(' ')
-                    coord = [float(val) for val in coord]
+                    coord = [float(val) for val in coord if val != '']
                     element = atom_labels[int(coord[0])]
                     self.elements.append(element)
                     del coord[0]
@@ -54,7 +54,7 @@ class XSF():
             # once density block is reached, get ngfft spacing and end init
             if line.strip() == datagrid:
                 ngfft_spacing = self.xsf_lines[i+1].strip().split(' ')
-                ngfft_spacing = [int(val) for val in ngfft_spacing]
+                ngfft_spacing = [int(val) for val in ngfft_spacing if val != '']
                 self.ngfftx = ngfft_spacing[0]
                 self.ngffty = ngfft_spacing[1]
                 self.ngfftz = ngfft_spacing[2]
