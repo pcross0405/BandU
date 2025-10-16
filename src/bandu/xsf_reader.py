@@ -35,9 +35,9 @@ class XSF():
         for i, line in enumerate(self.xsf_lines):
             # get lattice vectors from XSF file
             if line.strip() == 'PRIMVEC':
-                self.lattice[0,:] = [float(val) for val in self.xsf_lines[i+1].strip().split(' ')]
-                self.lattice[1,:] = [float(val) for val in self.xsf_lines[i+2].strip().split(' ')]
-                self.lattice[2,:] = [float(val) for val in self.xsf_lines[i+3].strip().split(' ')]
+                self.lattice[0,:] = [float(val) for val in self.xsf_lines[i+1].strip().split(' ') if val != '']
+                self.lattice[1,:] = [float(val) for val in self.xsf_lines[i+2].strip().split(' ') if val != '']
+                self.lattice[2,:] = [float(val) for val in self.xsf_lines[i+3].strip().split(' ') if val != '']
             # get number of atoms and atomic symbols
             # get atomic coordinates from XSF file
             if line.strip() == 'PRIMCOORD':
