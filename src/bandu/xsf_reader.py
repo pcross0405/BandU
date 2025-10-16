@@ -13,8 +13,20 @@ atom_labels = {1:'H', 2:'He', 3:'Li', 4:'Be', 5:'B', 6:'C', 7:'N', 8:'O', 9:'F',
 class XSF():
     def __init__(
             self, 
-            xsf_file:str='WFK.xsf'
+            xsf_file:str='WFK.xsf',
+            datagrid:str='BEGIN_DATAGRID_3D_principal_orbital_component'
         )->None:
+        '''
+        Class for reading in XSF files
+
+        Parameters
+        ----------
+        xsf_file : str
+            Path to XSF file
+        datagrid : str
+            Name of datagrid to be read in\n
+            Default is "BEGIN_DATAGRID_3D_principal_orbital_component"
+        '''
     # if xsf file is supplied, read in parameters
         self.xsf_file = xsf_file
         with open(xsf_file, 'r') as xsf:
@@ -40,7 +52,7 @@ class XSF():
                     del coord[0]
                     self.coords[atom,:] = coord
             # once density block is reached, get ngfft spacing and end init
-            if line.strip() == 'BEGIN_DATAGRID_3D_principal_orbital_component':
+            if line.strip() == datagrid:
                 ngfft_spacing = self.xsf_lines[i+1].strip().split(' ')
                 ngfft_spacing = [int(val) for val in ngfft_spacing]
                 self.ngfftx = ngfft_spacing[0]
@@ -54,11 +66,6 @@ class XSF():
     )->np.ndarray:
         '''
         Method for reading in density grid from XSF file. Returns grid as N dimensional numpy array.
-
-        Parameters
-        ----------
-        undo_xsf : bool
-            If True (which is the default), then the XSF formatting is undone by removing end points.
         '''
         density_lines:list|np.ndarray=[]
         for i, line in enumerate(self.xsf_lines):
