@@ -270,7 +270,7 @@ class Plotter():
             # plot contours
             if show_isosurf:
                 self.p.add_mesh(
-                    contour, 
+                    contour, # type: ignore
                     style='surface',
                     smooth_shading=smooth, 
                     lighting=lighting,
@@ -287,7 +287,7 @@ class Plotter():
                     opacity=opacities,
                     color=color,
                     show_scalar_bar=True,
-                )
+                ) 
         # plot irreducible kpoints
         if show_ird_points:
             pts = pv.PolyData(self.isosurface.ir_kpts)
@@ -402,7 +402,7 @@ class Plotter():
             strategy='null_value'
         )
         # sample color values from interpolated color grid
-        color_sample = contour.sample(color_grid)
+        color_sample = contour.sample(color_grid) # type: ignore
         return color_sample.active_scalars
     #-----------------------------------------------------------------------------------------------------------------#
     # method to calculate surface color values from XSF and WFK
