@@ -175,14 +175,14 @@ class Isosurface():
             sharpness=2.0, 
             strategy='null_value', 
             null_value=null_value
-        )
+        ) # type: ignore
         # create contour
         iso_range = [self.fermi_energy + self.energy_level, self.fermi_energy + self.energy_level]
         contour:pv.PolyData = inter_grid.contour(
             isosurfaces=2,
             rng=iso_range,
             method='contour'
-        )
+        ) # type: ignore
         self.contours.append(contour)
     #-----------------------------------------------------------------------------------------------------------------#
     # method for reading kpoints and eigenvalues from ABINIT WFK file
@@ -199,7 +199,7 @@ class Isosurface():
         nbands = wfk.bands[0]
         nkpt = wfk.nkpt
         self.fermi_energy = wfk.fermi
-        self.rec_latt = wc.WFK(lattice=wfk.real_lattice).Real2Reciprocal()
+        self.rec_latt = wc.WFK(lattice=wfk.real_lattice).rec_latt
         for wfk_obj in wfk.ReadEigenvalues():
             eigs.append(wfk_obj.eigenvalues)
         eigs = np.array(eigs).reshape((nkpt,nbands))
