@@ -225,7 +225,8 @@ class WFK():
         return new_WFK
     #-----------------------------------------------------------------------------------------------------------------#
     # method for converting real space lattice vectors to reciprocal space vectors
-    def Real2Reciprocal(
+    @property
+    def rec_latt(
         self
     )->np.ndarray:
         '''
@@ -385,7 +386,7 @@ class WFK():
         sym_pw_inds = sym_pw_inds.astype(int)
         ind_range = self.pw_indices.shape[0]
         # find reciprocal lattice shifts to move all points into BZ
-        bz = brlzn.BZ(rec_latt=self.Real2Reciprocal())
+        bz = brlzn.BZ(self.rec_latt)
         shifts = bz.GetShifts(sym_kpoints)
         # create WFK copies with new planewave indices
         for i, ind in enumerate(unique_inds):
@@ -414,7 +415,7 @@ class WFK():
     def GetBZPtsEigs(
         self
     )->tuple[np.ndarray,np.ndarray]:
-        bz = brlzn.BZ(rec_latt=self.Real2Reciprocal())
+        bz = brlzn.BZ(self.rec_latt)
         bz_kpts, bz_eigs = self.Symmetrize(points=self.kpoints, values=self.eigenvalues, reciprocal=True)
         bz_kpts -= bz.GetShifts(bz_kpts)
         return bz_kpts, bz_eigs
