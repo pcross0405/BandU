@@ -7,8 +7,8 @@ from . import wfk_class as wc
 
 class BandU():
     def __init__(
-        self, wfks:Generator, energy_level:float, width:float, grid:bool=True, fft:bool=True, norm:bool=True,
-        sym:bool=True, low_mem:bool=False, plot:bool=True
+        self, wfks:Generator, energy_level:float, width:float, grid:bool=True, ifft:bool=True, fft:bool=False, 
+        norm:bool=True, sym:bool=True, low_mem:bool=False, plot:bool=True, real_imag_sep:bool=False, opt:bool=True
     )->None:
         '''
         BandU object with methods for finding states and computing BandU functions from states.
@@ -25,19 +25,22 @@ class BandU():
         grid : bool
             Determines whether or not wavefunction coefficients are converted to 3D numpy grid.
             Default converts to grid (True).
+        ifft : bool
+            Determines whether or not wavefunction coefficients are Inverse Fourier transformed to real space.
+            Default converts from reciprocal space to real space (True).
         fft : bool
             Determines whether or not wavefunction coefficients are Fourier transformed to real space.
-            Default converts from reciprocal space to real space (True).
+            Generally, the Inverse Fourier transform should be applied to wavefunctions, see ifft argument.
+            Default does not apply FFT (False).
         norm : bool
             Determines whether or not wavefunction coefficients are normalized.
-            Default normalizes coefficients (True)
+            Default normalizes coefficients (True).
         plot : bool
             Plots eigenvalues from principal component analysis.
-            Default will save plot (True)
-        low_mem : bool
-            Run the program on a lower memory setting
-            The low_mem tag will print plane wave cofficients to a Python pickle to read from disk later.
-            Default does not run in low memory mode (False)
+            Default will save plot (True).
+        opt : bool
+            Attempts to automatically convert Band-U function into *mostly* real function by applying a phase factor.
+            Default computes and applies phase factor (True).
 
         Methods
         -------
@@ -45,6 +48,7 @@ class BandU():
             Writes real and imaginary parts of BandU functions to XSF files
         '''
         self.grid:bool=grid
+        self.ifft:bool=ifft
         self.fft:bool=fft
         self.norm:bool=norm
         self.sym:bool=sym
@@ -52,11 +56,15 @@ class BandU():
         self.found_states:int=0
         self.bandu_fxns:list[wc.WFK]=[]
         self.plot=plot
+        self.opt=opt
         # find all states within width
         self._FindStates(energy_level, width, wfks)
         print(f'{self.found_states} states found within specified energy range')
         # construct principal orbital components
-        principal_vals = self._PrincipalComponents()
+        if real_imag_sep:
+            principal_vals = self._RealImagPrnplComps()
+        else:
+            principal_vals = self._PrincipalComponents()
         # plot eigenvalues from PCA
         if plot:
             self._PlotEigs(principal_vals)
@@ -64,7 +72,11 @@ class BandU():
         for i in range(self.found_states):
             self.bandu_fxns[i] = self.bandu_fxns[i].Normalize()
         # compute ratios
-        omega_vals, omega_check = self._CheckOmega()
+        if not real_imag_sep:
+            omega_vals, omega_check = self._CheckOmega()
+        else:
+            omega_vals = 0
+            omega_check = 0
         # write output file
         fermi = self.bandu_fxns[0].fermi_energy
         with open('eigenvalues.out', 'w') as f:
@@ -113,7 +125,7 @@ class BandU():
             self.found_states -= 1
         else:
             # shift point back into Brillouin Zone as necessary
-            rec_latt = state.Real2Reciprocal()
+            rec_latt = state.rec_latt
             shift = brlzn.BZ(rec_latt=rec_latt).GetShifts(state.kpoints)
             state.pw_indices += shift
             state.kpoints = state.kpoints.reshape((-1,3)) - shift
@@ -122,8 +134,10 @@ class BandU():
         for wfk in funcs:
             if self.grid:
                 wfk = wfk.GridWFK()
-            if self.fft:
+            if self.ifft:
                 wfk = wfk.IFFT()
+            if self.fft:
+                wfk = wfk.FFT()
             if self.norm:
                 wfk = wfk.Normalize()
             yield wfk
@@ -133,7 +147,7 @@ class BandU():
     def _CheckEdgeCase(
         self
     ):
-        bz = brlzn.BZ(self.bandu_fxns[0].Real2Reciprocal())
+        bz = brlzn.BZ(self.bandu_fxns[0].rec_latt)
         x = self.bandu_fxns[0].ngfftx
         y = self.bandu_fxns[0].ngffty
         z = self.bandu_fxns[0].ngfftz
@@ -163,7 +177,7 @@ class BandU():
                     dupes.extend(shifted_dupe)
                     self.duped_states += self.found_states
         self.bandu_fxns.extend(dupes)
-        #-----------------------------------------------------------------------------------------------------------------#
+    #-----------------------------------------------------------------------------------------------------------------#
     # find principal components
     def _PrincipalComponents(
         self
@@ -175,7 +189,7 @@ class BandU():
         z = self.bandu_fxns[0].ngfftz
         mat = np.zeros((total_states,x*y*z), dtype=complex)
         for i in range(total_states):
-            mat[i,:] = self.bandu_fxns[i].wfk_coeffs.reshape((1,x*y*z))
+            mat[i,:] = self.bandu_fxns[i].wfk_coeffs.reshape((1,x*y*z)).real
         # compute overlap matrix
         print('Computing overlap matrix')
         overlap_mat = np.matmul(np.conj(mat), mat.T)
@@ -189,6 +203,40 @@ class BandU():
         mat = np.matmul(principal_vecs, mat)
         for i in range(total_states):
             self.bandu_fxns[i].wfk_coeffs = mat[i,:]
+        return principal_vals 
+    #-----------------------------------------------------------------------------------------------------------------#
+    # find principal components with real and imaginary separated
+    def _RealImagPrnplComps(
+        self
+    )->np.ndarray:
+        x = self.bandu_fxns[0].ngfftx
+        y = self.bandu_fxns[0].ngffty
+        z = self.bandu_fxns[0].ngfftz
+        mat = np.zeros((2*self.found_states,x*y*z), dtype=complex)
+        for i in range(self.found_states):
+            ind = 2*i
+            real_coeffs = self.bandu_fxns[i].wfk_coeffs.real
+            imag_coeffs = self.bandu_fxns[i].wfk_coeffs.imag
+            mat[ind,:] = real_coeffs.reshape((1,x*y*z))
+            mat[ind+1,:] = imag_coeffs.reshape((1,x*y*z))
+        print('Computing overlap matrix')
+        overlap_mat = np.matmul(np.conj(mat),mat.T)
+        # diagonlize matrix
+        principal_vals, principal_vecs = np.linalg.eig(overlap_mat)
+        principal_vecs = principal_vecs.T
+        # organize eigenvectors and eigenvalues
+        sorted_inds = np.flip(principal_vals.argsort())
+        principal_vals = np.take(principal_vals, sorted_inds)
+        principal_vecs = np.take(principal_vecs, sorted_inds, axis=0)
+        mat = np.matmul(principal_vecs, mat)
+        for i in range(2*self.found_states):
+            if i < self.found_states:
+                self.bandu_fxns[i].wfk_coeffs = mat[i,:]
+            else:
+                new_coeffs = copy(self.bandu_fxns[0])
+                new_coeffs.wfk_coeffs = mat[i,:]
+                self.bandu_fxns.append(new_coeffs)
+        self.found_states *= 2
         return principal_vals 
     #-----------------------------------------------------------------------------------------------------------------#
     # find ratio of real and imaginary components
