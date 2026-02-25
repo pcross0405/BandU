@@ -1,4 +1,6 @@
 import numpy as np
+from typing import Self
+from . import wfk_class
 
 atom_labels = {1:'H', 2:'He', 3:'Li', 4:'Be', 5:'B', 6:'C', 7:'N', 8:'O', 9:'F', 10:'Ne', 11:'Na', 12:'Mg', 13:'Al', 
                14:'Si', 15:'P', 16:'S', 17:'Cl', 18:'Ar', 19:'K', 20:'Ca', 21:'Sc', 22:'Ti', 23:'V', 24:'Cr', 25:'Mn',
@@ -10,7 +12,7 @@ atom_labels = {1:'H', 2:'He', 3:'Li', 4:'Be', 5:'B', 6:'C', 7:'N', 8:'O', 9:'F',
                81:'Tl', 82:'Pb', 83:'Bi', 84:'Po', 85:'At', 86:'Rn', 87:'Fr', 88:'Ra', 89:'Ac', 90:'Th', 91:'Pa', 
                92:'U'}
 
-class XSF():
+class XSF(wfk_class.WFK):
     def __init__(
             self, 
             xsf_file:str='WFK.xsf',
@@ -90,3 +92,11 @@ class XSF():
         density_lines = np.array(density_lines, dtype=float)
         density_lines = density_lines.reshape((self.ngfftx, self.ngffty, self.ngfftz), order='F')
         return density_lines
+    
+    #-----------------------------------------------------------------------------------------------------------------#
+    # method for removing XSF format
+    def RemoveFormat(
+        self
+    )->np.ndarray:
+        self.wfk_coeffs = self.ReadGrid()
+        return super().RemoveXSF().wfk_coeffs
