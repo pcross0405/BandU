@@ -189,7 +189,7 @@ class BandU():
         z = self.bandu_fxns[0].ngfftz
         mat = np.zeros((total_states,x*y*z), dtype=complex)
         for i in range(total_states):
-            mat[i,:] = self.bandu_fxns[i].wfk_coeffs.reshape((1,x*y*z)).real
+            mat[i,:] = self.bandu_fxns[i].wfk_coeffs.reshape((1,x*y*z))
         # compute overlap matrix
         print('Computing overlap matrix')
         overlap_mat = np.matmul(np.conj(mat), mat.T)
