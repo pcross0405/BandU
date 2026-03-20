@@ -106,7 +106,7 @@ class BandU():
                     coeffs.wfk_coeffs = coeffs.wfk_coeffs[i]
                     for wfk in self._Process(coeffs):
                         self.bandu_fxns.append(wfk)
-        if self.bandu_fxns is []:
+        if self.bandu_fxns == []:
             raise ValueError(
             '''Identified 0 states within provided width.
             Action: Increase width or increase fineness of kpoint grid.
@@ -281,8 +281,9 @@ class BandU():
         ax.tick_params(axis='both', labelsize=12)
         plt.xlim(1.0,len(y)+5.0)
         plt.ylim=(0,np.max(y))
-        mod_val = round(self.found_states/5 - 0.5)
-        plt.xticks(ticks=[val for val in range(0,len(y)+1) if val % mod_val == 0])
+        if self.found_states >= 10:
+            mod_val = round(self.found_states/5 - 0.5)
+            plt.xticks(ticks=[val for val in range(0,len(y)+1) if val % mod_val == 0])
         plt.rcParams['font.family'] = 'Times New Roman'
         plt.savefig('bandu_eigenvalues.png',dpi=500)
     #-----------------------------------------------------------------------------------------------------------------#
