@@ -496,7 +496,7 @@ class WFK():
     #-----------------------------------------------------------------------------------------------------------------#
     # method for writing wavefunctions to XSF file
     def WriteXSF(
-            self, xsf_file:str, _component:bool=True
+            self, xsf_file:str, _component:bool=True, xred:bool=True
     )->None:
         '''
         A method for writing numpy grids to an XSF formatted file.
@@ -505,6 +505,9 @@ class WFK():
         ----------
         xsf_file : str
             The file name.
+        
+        xred : bool
+            Set to True if coordinates are fractional, False otherwise.
         '''
         # first run writes out real part of eigenfunction to xsf
         if _component:
@@ -523,12 +526,18 @@ class WFK():
             print(f'{self.natom} 1', file=xsf)
             for i, coord in enumerate(self.xred):
                 atomic_num = int(self.znucltypat[self.typat[i] - 1])
-                cart_coord = np.matmul(coord, self.lattice)
+                if xred:
+                    cart_coord = np.matmul(coord, self.lattice)
+                else:
+                    cart_coord = coord
                 print(f'{atomic_num} {cart_coord[0]} {cart_coord[1]} {cart_coord[2]}', file=xsf)
             print('ATOMS', file=xsf)
             for i, coord in enumerate(self.xred):
                 atomic_num = int(self.znucltypat[self.typat[i] - 1])
-                cart_coord = np.matmul(coord, self.lattice)
+                if xred:
+                    cart_coord = np.matmul(coord, self.lattice)
+                else:
+                    cart_coord = coord
                 print(f'{atomic_num} {cart_coord[0]} {cart_coord[1]} {cart_coord[2]}', file=xsf)
             print('BEGIN_BLOCK_DATAGRID_3D', file=xsf)
             print('datagrids', file=xsf)
