@@ -1,5 +1,5 @@
 import numpy as np
-from typing import Self
+from typing import Any, Self
 from . import wfk_class
 
 atom_labels = {1:'H', 2:'He', 3:'Li', 4:'Be', 5:'B', 6:'C', 7:'N', 8:'O', 9:'F', 10:'Ne', 11:'Na', 12:'Mg', 13:'Al', 
@@ -11,6 +11,8 @@ atom_labels = {1:'H', 2:'He', 3:'Li', 4:'Be', 5:'B', 6:'C', 7:'N', 8:'O', 9:'F',
                70:'Yb', 71:'Lu', 72:'Hf', 73:'Ta', 74:'W', 75:'Re', 76:'Os', 77:'Ir', 78:'Pt', 79:'Au', 80:'Hg', 
                81:'Tl', 82:'Pb', 83:'Bi', 84:'Po', 85:'At', 86:'Rn', 87:'Fr', 88:'Ra', 89:'Ac', 90:'Th', 91:'Pa', 
                92:'U'}
+
+reverse_labels = {v:k for k,v in atom_labels.items()}
 
 class XSF(wfk_class.WFK):
     def __init__(
@@ -29,31 +31,38 @@ class XSF(wfk_class.WFK):
             Name of datagrid to be read in\n
             Default is "BEGIN_DATAGRID_3D_principal_orbital_component"
         '''
-    # if xsf file is supplied, read in parameters
+        super().__init__()
+
+        # if xsf file is supplied, read in parameters
         self.xsf_file = xsf_file
         self.datagrid = datagrid
         with open(xsf_file, 'r') as xsf:
             self.xsf_lines = xsf.readlines()
         self.lattice = np.zeros((3,3))
+        self.elements = []
+        coords = None
         for i, line in enumerate(self.xsf_lines):
             # get lattice vectors from XSF file
             if line.strip() == 'PRIMVEC':
-                self.lattice[0,:] = [float(val) for val in self.xsf_lines[i+1].strip().split(' ') if val != '']
-                self.lattice[1,:] = [float(val) for val in self.xsf_lines[i+2].strip().split(' ') if val != '']
-                self.lattice[2,:] = [float(val) for val in self.xsf_lines[i+3].strip().split(' ') if val != '']
+                self.lattice[0,:] = np.array([float(val) for val in self.xsf_lines[i+1].strip().split(' ') if val != ''])
+                self.lattice[1,:] = np.array([float(val) for val in self.xsf_lines[i+2].strip().split(' ') if val != ''])
+                self.lattice[2,:] = np.array([float(val) for val in self.xsf_lines[i+3].strip().split(' ') if val != ''])
+
             # get number of atoms and atomic symbols
             # get atomic coordinates from XSF file
             if line.strip() == 'PRIMCOORD':
-                self.natoms = int(self.xsf_lines[i+1].strip().split(' ')[0])
-                self.coords = np.zeros((self.natoms, 3))
-                self.elements = []
-                for atom in range(self.natoms):
+                self.natom = int(self.xsf_lines[i+1].strip().split(' ')[0])
+                coords = np.zeros((self.natom, 3))
+                for atom in range(self.natom):
                     coord = self.xsf_lines[i+atom+2].strip().split(' ')
                     coord = [float(val) for val in coord if val != '']
                     element = atom_labels[int(coord[0])]
+                    if int(coord[0]) not in self.znucltypat:
+                        self.znucltypat.append(int(coord[0]))
                     self.elements.append(element)
                     del coord[0]
-                    self.coords[atom,:] = coord
+                    coords[atom,:] = coord
+
             # once density block is reached, get ngfft spacing and end init
             if line.strip() == self.datagrid:
                 ngfft_spacing = self.xsf_lines[i+1].strip().split(' ')
@@ -61,7 +70,17 @@ class XSF(wfk_class.WFK):
                 self.ngfftx = ngfft_spacing[0]
                 self.ngffty = ngfft_spacing[1]
                 self.ngfftz = ngfft_spacing[2]
-                return None
+                break
+
+        # construct typat
+        self.typat = [self.znucltypat.index(reverse_labels[el])+1 for el in self.elements]
+
+        # construct xred from coords
+        self.xred = coords if coords is not None else np.zeros((1,3))
+        self.xred[:,0] /= np.linalg.norm(self.lattice[0,:])
+        self.xred[:,1] /= np.linalg.norm(self.lattice[1,:])
+        self.xred[:,2] /= np.linalg.norm(self.lattice[2,:])
+
     #-----------------------------------------------------------------------------------------------------------------#
     # method reading in BandU eigenfunction from XSF
     def ReadGrid(
